@@ -594,8 +594,7 @@ function saveManual(){
   if(!amt||parseFloat(amt)<=0){ showToast("Please enter a valid amount"); return; }
   draft.name=name; draft.amount=amt;
   draft.extracted={ name, amount:parseFloat(amt), address:document.getElementById("f-addr")?.value?.trim()||"", city:document.getElementById("f-city")?.value?.trim()||"", state:document.getElementById("f-state")?.value?.trim()||"", zip:document.getElementById("f-zip")?.value?.trim()||"" };
-  if(S.autoFEC!==false) searchFEC(name);
-  go("s-fec");
+  go("s-remit-q");
 }
 function confirmExtracted(){
   const name=document.getElementById("f-name")?.value?.trim();
@@ -604,8 +603,7 @@ function confirmExtracted(){
   if(!amt||parseFloat(amt)<=0){ showToast("Please enter a valid amount"); return; }
   draft.name=name; draft.amount=amt;
   draft.extracted={ ...draft.extracted, name, amount:parseFloat(amt), address:document.getElementById("f-addr")?.value?.trim()||"", city:document.getElementById("f-city")?.value?.trim()||"", state:document.getElementById("f-state")?.value?.trim()||"", zip:document.getElementById("f-zip")?.value?.trim()||"" };
-  if(S.autoFEC!==false) searchFEC(name);
-  go("s-fec");
+  go("s-remit-q");
 }
 
 // STEP 4: FEC LOOKUP
@@ -614,7 +612,7 @@ function scrFEC(){
   const q=draft._fecQuery||draft.name;
   const sel=draft._fecSelected;
   const res=draft._fecResults||[];
-  return hdrBar("Back","go(\'s-read\')")+progBar(4,7,`Check #${cn} · Step 4 of 7 — FEC Lookup`)+`<div class="main">
+  return hdrBar("Back","go(\'s-remit-gen\')")+progBar(5,6,`Check #${cn} · Step 5 of 6 — FEC Lookup`)+`<div class="main">
   <h1 class="stitle">FEC.gov Lookup</h1>
   <p class="ssub">I\'ll look up ${draft.name}\'s occupation &amp; employer in FEC donation records — needed for the remit form.</p>
   <div class="field" style="display:flex;gap:8px;align-items:flex-end;margin-bottom:10px">
@@ -654,14 +652,14 @@ function saveFEC(){
   const occ=document.getElementById("fec-occ")?.value?.trim()||"";
   const emp=document.getElementById("fec-emp")?.value?.trim()||"";
   draft.fecData={ occupation:occ, employer:emp };
-  go("s-remit-q");
+  go("s-remit-gen");
 }
-function skipFEC(){ draft.fecData=null; go("s-remit-q"); }
+function skipFEC(){ draft.fecData=null; go("s-remit-gen"); }
 
 // STEP 5: REMIT QUESTION
 function scrRemitQ(){
   const cn=checks.length+1;
-  return hdrBar("Back","go(\'s-fec\')")+progBar(5,7,`Check #${cn} · Step 5 of 7 — Remit`)+`<div class="main">
+  return hdrBar("Back","go(\'s-read\')")+progBar(4,6,`Check #${cn} · Step 4 of 6 — Remit`)+`<div class="main">
   <h1 class="stitle">Do you have a physical remit on hand?</h1>
   <p class="ssub">A remit is the FEC-required donor form. If ${draft.name} sent one with their check, photograph it now.</p>
   <div class="ropt" onclick="go(\'s-remit-photo\')"><div class="ri">📸</div><div><div class="rl">Yes — I have a physical remit</div><div class="rd">Take a photo of it right now</div></div></div>
@@ -723,6 +721,8 @@ function markManualEA(){ draft.remitType="manual-ea"; go("s-done"); }
 function scrRemitGen(){
   const cn=checks.length+1;
   const ext=draft.extracted||{};
+  // Kick off FEC search in background if not done yet
+  if(S.autoFEC!==false&&draft.name&&!draft._fecResults?.length&&!draft._fecSearching) searchFEC(draft.name);
   return hdrBar("Back","go(\'s-remit-check\')")+progBar(5,7,`Check #${cn} · Step 5 of 7 — Generate Remit`)+`<div class="main">
   <h1 class="stitle">Generate Remit PDF</h1>
   <p class="ssub">I\'ll fill out a FieldTeam6 remit form for ${draft.name} using the info we have. Review and edit any fields before generating.</p>
