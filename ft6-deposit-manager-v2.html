@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="FT6 Deposits">
+  <title>FT6 Deposit Manager</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    :root {
+      --bg:#07091a; --card:#0d1228; --card2:#131929;
+      --gold:#c8a020; --gold-lt:#e8c248; --gold-dk:#9a7810;
+      --white:#ede9e0; --muted:#5e74a0; --border:#1a2644;
+      --red:#922020; --green:#1a6e3c; --blue:#1a3a7a; --purple:#2a1a6e;
+    }
+    body { background:var(--bg); color:var(--white); font-family:'DM Sans',sans-serif; min-height:100vh; max-width:520px; margin:0 auto; padding-bottom:80px; }
+
+    /* ── HEADER ── */
+    .hdr { display:flex; align-items:center; justify-content:space-between; padding:16px 20px 12px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg); z-index:200; }
+    .logo { font-family:'Playfair Display',serif; font-size:19px; font-weight:900; color:var(--gold); }
+    .logo em { color:var(--white); font-style:normal; }
+    .hdr-r { display:flex; gap:8px; }
+    .ibtn { background:none; border:1.5px solid var(--border); color:var(--muted); border-radius:8px; padding:6px 11px; font-size:12px; font-weight:600; font-family:'DM Sans',sans-serif; cursor:pointer; transition:all .2s; }
+    .ibtn:active,.ibtn:hover { border-color:var(--gold); color:var(--gold); }
+
+    /* ── PROGRESS ── */
+    .prog { background:var(--card); border-bottom:1px solid var(--border); padding:9px 20px; }
+    .prog-lbl { font-size:10px; font-weight:700; letter-spacing:1.8px; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+    .prog-track { height:2px; background:var(--border); border-radius:2px; overflow:hidden; }
+    .prog-fill { height:100%; background:var(--gold); border-radius:2px; transition:width .4s ease; }
+
+    /* ── MAIN ── */
+    .main { padding:24px 20px; }
+    .stitle { font-family:'Playfair Display',serif; font-size:25px; font-weight:700; line-height:1.2; margin-bottom:7px; }
+    .ssub { color:var(--muted); font-size:13.5px; line-height:1.55; margin-bottom:24px; }
+
+    /* ── FORMS ── */
+    .field { margin-bottom:18px; }
+    .field label { display:block; font-size:10px; font-weight:700; letter-spacing:1.8px; text-transform:uppercase; color:var(--muted); margin-bottom:7px; }
+    input[type=text],input[type=number],input[type=email],input[type=password],textarea,select {
+      width:100%; background:var(--card2); border:1.5px solid var(--border); color:var(--white);
+      font-family:'DM Sans',sans-serif; font-size:17px; padding:13px 15px; border-radius:10px;
+      outline:none; transition:border-color .2s; -webkit-appearance:none; appearance:none;
+    }
+    input:focus,textarea:focus,select:focus { border-color:var(--gold); }
+    input::placeholder,textarea::placeholder { color:var(--muted); }
+    textarea { resize:none; font-size:13px; line-height:1.55; }
+    select { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%235e74a0' d='M1 1l5 5 5-5'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 15px center; padding-right:36px; }
+
+    /* ── BUTTONS ── */
+    .btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:15px; border:none; border-radius:11px; font-family:'DM Sans',sans-serif; font-size:15px; font-weight:600; cursor:pointer; transition:all .2s; }
+    .btn-gold   { background:var(--gold); color:#07091a; }
+    .btn-gold:active { background:var(--gold-lt); }
+    .btn-out    { background:transparent; border:1.5px solid var(--border); color:var(--white); }
+    .btn-out:active { border-color:var(--gold); }
+    .btn-red    { background:var(--red); color:#fff; }
+    .btn-green  { background:var(--green); color:#fff; }
+    .btn-blue   { background:var(--blue); color:#fff; }
+    .btn-sm     { padding:10px 14px; font-size:13px; width:auto; }
+    .stack      { display:flex; flex-direction:column; gap:10px; }
+    .row2       { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+    /* ── PHOTO SLOT ── */
+    .photo-slot { background:var(--card2); border:2px dashed var(--border); border-radius:14px; overflow:hidden; cursor:pointer; margin-bottom:13px; transition:border-color .2s; position:relative; }
+    .photo-slot.filled { border-style:solid; border-color:var(--gold); }
+    .photo-slot:active { border-color:var(--gold); }
+    .photo-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:36px 20px; gap:9px; color:var(--muted); }
+    .photo-empty .ei { font-size:38px; }
+    .photo-empty .el { font-size:14px; font-weight:500; }
+    .photo-empty .es { font-size:12px; }
+    .photo-prev { width:100%; display:block; max-height:240px; object-fit:contain; background:#000; }
+    .retake-btn { position:absolute; bottom:10px; right:10px; background:rgba(0,0,0,.75); color:#fff; border:none; border-radius:7px; padding:5px 12px; font-size:12px; font-family:'DM Sans',sans-serif; font-weight:600; cursor:pointer; z-index:2; }
+    .hf { display:none !important; }
+
+    /* ── SAVE PHOTO BTN ── */
+    .save-photo-btn { display:flex; align-items:center; justify-content:center; gap:6px; padding:10px; background:rgba(200,160,32,.12); border:1.5px solid var(--gold-dk); color:var(--gold); border-radius:9px; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:600; cursor:pointer; margin-bottom:13px; width:100%; transition:all .2s; }
+    .save-photo-btn:active { background:rgba(200,160,32,.25); }
+
+    /* ── REMIT OPTS ── */
+    .ropt { background:var(--card2); border:2px solid var(--border); border-radius:12px; padding:15px 17px; margin-bottom:10px; cursor:pointer; transition:all .2s; display:flex; align-items:center; gap:14px; }
+    .ropt:active { border-color:var(--gold); background:var(--card); }
+    .ropt .ri { font-size:26px; }
+    .ropt .rl { font-weight:600; font-size:15px; }
+    .ropt .rd { font-size:12px; color:var(--muted); margin-top:2px; }
+
+    /* ── STATUS PILL ── */
+    .pill { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:3px 9px; border-radius:100px; letter-spacing:.3px; }
+    .pill-green  { background:#0d3020; color:#4ade80; }
+    .pill-red    { background:#2a0d0d; color:#f87171; }
+    .pill-gold   { background:#2a1e00; color:var(--gold); }
+    .pill-blue   { background:#0d1a38; color:#60a5fa; }
+    .pill-purple { background:#1a0d38; color:#a78bfa; }
+    .pill-muted  { background:var(--card2); color:var(--muted); }
+
+    /* ── CHECK ITEM ── */
+    .chk-item { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px; }
+    .chk-row { display:flex; gap:12px; align-items:flex-start; }
+    .chk-num { background:var(--gold); color:#07091a; width:27px; height:27px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex-shrink:0; margin-top:3px; }
+    .chk-info { flex:1; min-width:0; }
+    .chk-name { font-weight:600; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .chk-amt  { font-family:'Playfair Display',serif; font-size:22px; font-weight:700; color:var(--gold); }
+    .chk-meta { display:flex; flex-wrap:wrap; gap:5px; margin-top:5px; }
+    .del-btn  { background:none; border:none; color:var(--muted); cursor:pointer; font-size:18px; padding:2px 4px; line-height:1; }
+
+    /* ── TOTAL BAR ── */
+    .total-bar { background:var(--card2); border:1.5px solid var(--gold-dk); border-radius:12px; padding:14px 17px; display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+    .total-lbl { font-size:10px; font-weight:700; letter-spacing:1.8px; text-transform:uppercase; color:var(--muted); }
+    .total-sub { font-size:13px; color:var(--muted); margin-top:3px; }
+    .total-amt { font-family:'Playfair Display',serif; font-size:28px; font-weight:700; color:var(--gold); }
+
+    /* ── INFO / WARN BOXES ── */
+    .info-box { background:#090f26; border:1px solid #172040; border-radius:10px; padding:12px 14px; margin-bottom:15px; font-size:13px; color:#6a96c8; line-height:1.55; }
+    .info-box strong { color:#90b8e0; }
+    .warn-box { background:#1a1000; border:1px solid #382200; border-radius:10px; padding:12px 14px; margin-bottom:15px; font-size:13px; color:#b08030; line-height:1.55; }
+    .warn-box strong { color:#d09840; }
+    .ok-box { background:#0a1f10; border:1px solid #1a4228; border-radius:10px; padding:12px 14px; margin-bottom:15px; font-size:13px; color:#4a9e6a; line-height:1.55; }
+    .ok-box strong { color:#6abe8a; }
+
+    /* ── AI EXTRACT CARD ── */
+    .ai-card { background:var(--card2); border:1.5px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; }
+    .ai-card-title { font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--gold); margin-bottom:12px; }
+    .ai-field { margin-bottom:10px; }
+    .ai-field label { display:block; font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin-bottom:5px; }
+    .ai-field .val { font-size:15px; font-weight:500; color:var(--white); }
+    .ai-field .val-empty { font-size:13px; color:var(--muted); font-style:italic; }
+
+    /* ── FEC RESULT ── */
+    .fec-result { background:var(--card2); border:1.5px solid var(--border); border-radius:12px; padding:14px; margin-bottom:10px; cursor:pointer; transition:border-color .2s; }
+    .fec-result:active { border-color:var(--gold); }
+    .fec-result.selected { border-color:var(--gold); background:rgba(200,160,32,.07); }
+    .fec-name { font-weight:600; font-size:14px; }
+    .fec-occ  { font-size:13px; color:var(--muted); margin-top:3px; }
+    .fec-meta { font-size:11px; color:var(--muted); margin-top:4px; }
+
+    /* ── SPINNER ── */
+    .spin-wrap { display:flex; align-items:center; gap:10px; color:var(--muted); font-size:13px; padding:8px 0; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .spin { width:18px; height:18px; border:2px solid var(--border); border-top-color:var(--gold); border-radius:50%; animation:spin .7s linear infinite; flex-shrink:0; }
+
+    /* ── PHOTO GRID ── */
+    .pgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+    .pgrid-item { position:relative; border-radius:9px; overflow:hidden; border:1.5px solid var(--border); }
+    .pgrid-item img { width:100%; height:85px; object-fit:cover; display:block; }
+    .pgrid-lbl { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,.75); font-size:10px; font-weight:600; color:#fff; padding:3px 7px; }
+
+    /* ── EMAIL FIELDS ── */
+    .email-box { background:var(--card2); border:1.5px solid var(--border); border-radius:10px; padding:14px 15px; font-family:'Courier New',monospace; font-size:11.5px; color:var(--white); white-space:pre-wrap; word-break:break-word; line-height:1.65; overflow:hidden; }
+    .copy-btn { display:flex; align-items:center; justify-content:center; gap:7px; padding:9px; background:var(--card2); border:1.5px solid var(--border); color:var(--muted); border-radius:8px; font-family:'DM Sans',sans-serif; font-size:12px; font-weight:600; cursor:pointer; margin-bottom:6px; width:100%; transition:all .2s; }
+    .copy-btn:active { border-color:var(--gold); color:var(--gold); }
+
+    /* ── DIV / SEC ── */
+    .div { height:1px; background:var(--border); margin:20px 0; }
+    .sec { font-size:10px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--gold); margin-bottom:13px; display:flex; align-items:center; gap:10px; }
+    .sec::after { content:''; flex:1; height:1px; background:var(--border); }
+
+    /* ── HERO ── */
+    .hero { padding:28px 20px 20px; text-align:center; }
+    .hero-icon { font-size:50px; margin-bottom:15px; }
+    .hero-title { font-family:'Playfair Display',serif; font-size:32px; font-weight:900; line-height:1.1; margin-bottom:10px; }
+    .hero-sub { font-size:14px; color:var(--muted); line-height:1.6; max-width:280px; margin:0 auto 26px; }
+
+    /* ── SUCCESS ── */
+    .success-icon { font-size:64px; text-align:center; margin:18px 0; }
+    .success-name { font-family:'Playfair Display',serif; font-size:26px; font-weight:700; text-align:center; margin-bottom:5px; }
+    .success-amt  { font-family:'Playfair Display',serif; font-size:40px; font-weight:900; color:var(--gold); text-align:center; margin-bottom:4px; }
+    .success-sub  { color:var(--muted); font-size:13px; text-align:center; margin-bottom:26px; }
+
+    /* ── TOAST ── */
+    .toast { position:fixed; bottom:26px; left:50%; transform:translateX(-50%); background:var(--gold); color:#07091a; padding:10px 20px; border-radius:100px; font-weight:700; font-size:13px; z-index:9999; white-space:nowrap; pointer-events:none; animation:tIn .2s ease, tOut .3s ease 2.2s forwards; }
+    @keyframes tIn  { from{opacity:0;transform:translateX(-50%) translateY(10px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
+    @keyframes tOut { from{opacity:1} to{opacity:0} }
+
+    /* ── LOADING OVERLAY ── */
+    .loading-overlay { position:fixed; inset:0; background:rgba(7,9,26,.88); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; z-index:1000; }
+    .loading-overlay .spin { width:36px; height:36px; border-width:3px; }
+    .loading-overlay .lmsg { font-size:15px; color:var(--muted); }
+
+    /* ── LIGHTBOX ── */
+    .lightbox { position:fixed; inset:0; background:rgba(0,0,0,.93); z-index:1000; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; }
+    .lightbox img { max-width:100%; max-height:75vh; object-fit:contain; border-radius:8px; }
+    .lightbox-actions { display:flex; gap:12px; margin-top:16px; width:100%; max-width:380px; }
+    .lb-close { position:absolute; top:20px; right:20px; background:rgba(255,255,255,.1); border:none; color:#fff; width:38px; height:38px; border-radius:50%; font-size:20px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+
+    /* settings toggle */
+    .toggle-row { display:flex; align-items:center; justify-content:space-between; padding:4px 0; }
+    .toggle-label { font-size:14px; font-weight:500; }
+    .toggle-sub { font-size:12px; color:var(--muted); margin-top:2px; }
+    input[type=checkbox] { width:44px; height:26px; appearance:none; -webkit-appearance:none; background:var(--border); border-radius:13px; position:relative; cursor:pointer; transition:background .2s; flex-shrink:0; }
+    input[type=checkbox]:checked { background:var(--gold); }
+    input[type=checkbox]::after { content:''; position:absolute; width:20px; height:20px; background:#fff; border-radius:50%; top:3px; left:3px; transition:left .2s; }
+    input[type=checkbox]:checked::after { left:21px; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  PERSISTENT SETTINGS
+// ═══════════════════════════════════════════════════════
+let S = {};
+try { S = JSON.parse(localStorage.getItem('ft6_s2') || '{}'); } catch(e){}
+S = Object.assign({
+  name:'', to:'', cc:'',
+  anthropicKey:'',
+  abUser:'', abPass:'',
+  eaKey:'', eaApp:'',
+  autoFEC: true
+}, S);
+function saveS() { localStorage.setItem('ft6_s2', JSON.stringify(S)); }
+
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+let checks  = [];
+let draft   = null;
+let step    = 'home';
+let _emailPhotos  = [];
+let _emailSubject = '';
+let _emailBody    = '';
+
+// AI extraction state
+let _extracting = false;
+let _extracted  = null; // { name, address, city, state, zip }
+
+// FEC search state
+let _fecResults   = [];
+let _fecSearching = false;
+let _fecSelected  = null; // { occupation, employer }
+let _fecQuery     = '';
+
+// ActBlue / EveryAction state
+let _abStatus = null; // null | 'checking' | 'found' | 'notfound' | 'error' | 'no-creds'
+let _eaStatus = null;
+
+// Lightbox
+let _lightboxSrc  = null;
+let _lightboxFile = null;
+
+// ═══════════════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════════════
+function go(s) { step = s; render(); window.scrollTo(0,0); }
+
+function startCheck() {
+  draft = {
+    id: Date.now(), name:'', amount:'',
+    front:null, back:null,
+    remitType:null, remit:null,
+    extracted:null, fecData:null,
+    abStatus:null, eaStatus:null,
+    notes:''
+  };
+  _extracted = null; _fecResults = []; _fecSelected = null;
+  _abStatus = null; _eaStatus = null; _fecQuery = '';
+  go('n-name');
+}
+
+function delCheck(id) { checks = checks.filter(c=>c.id!==id); render(); }
+
+// ═══════════════════════════════════════════════════════
+//  UTILITIES
+// ═══════════════════════════════════════════════════════
+function fmt$(v) {
+  const n = parseFloat(String(v).replace(/[^0-9.]/g,''));
+  if (isNaN(n)) return '$0.00';
+  return '$' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+}
+function slug(n) { return (n||'donor').trim().replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,''); }
+function showToast(m) {
+  document.querySelectorAll('.toast').forEach(t=>t.remove());
+  const t = document.createElement('div'); t.className='toast'; t.textContent=m;
+  document.body.appendChild(t); setTimeout(()=>t.remove(), 2700);
+}
+function copyText(txt) {
+  navigator.clipboard?.writeText(txt).then(()=>showToast('Copied!')).catch(()=>{
+    const ta=document.createElement('textarea'); ta.value=txt; ta.style.cssText='position:fixed;opacity:0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+    showToast('Copied!');
+  });
+}
+function showLoading(msg) {
+  hideLoading();
+  const d = document.createElement('div'); d.className='loading-overlay'; d.id='loading-overlay';
+  d.innerHTML=`<div class="spin"></div><div class="lmsg">${msg}</div>`;
+  document.body.appendChild(d);
+}
+function hideLoading() { document.getElementById('loading-overlay')?.remove(); }
+
+// ═══════════════════════════════════════════════════════
+//  PHOTO HANDLING
+// ═══════════════════════════════════════════════════════
+function triggerFile(id) { document.getElementById(id)?.click(); }
+function readFile(file, cb) { const r=new FileReader(); r.onload=e=>cb(e.target.result); r.readAsDataURL(file); }
+
+function openLightbox(src, filename) {
+  _lightboxSrc = src; _lightboxFile = filename;
+  const lb = document.createElement('div');
+  lb.className='lightbox'; lb.id='lightbox';
+  lb.innerHTML=`
+    <button class="lb-close" onclick="closeLightbox()">✕</button>
+    <img src="${src}">
+    <div class="lightbox-actions">
+      <button class="btn btn-gold" onclick="downloadPhoto('${filename}')">⬇ Save to Camera Roll</button>
+      <button class="btn btn-out" onclick="closeLightbox()">Done</button>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-top:12px;text-align:center">On iPhone: tap Save, then press & hold the image → "Save to Photos"</p>`;
+  document.body.appendChild(lb);
+}
+function closeLightbox() { document.getElementById('lightbox')?.remove(); }
+
+async function downloadPhoto(filename) {
+  if (!_lightboxSrc) return;
+  try {
+    const res   = await fetch(_lightboxSrc);
+    const blob  = await res.blob();
+    const file  = new File([blob], filename, { type: blob.type });
+    if (navigator.canShare?.({ files:[file] })) {
+      await navigator.share({ files:[file], title:filename });
+      showToast('Shared/Saved!'); return;
+    }
+  } catch(e) {}
+  const a = document.createElement('a'); a.href=_lightboxSrc; a.download=filename; a.click();
+  showToast('Download started');
+}
+
+// ═══════════════════════════════════════════════════════
+//  AI VISION — EXTRACT CHECK DATA
+// ═══════════════════════════════════════════════════════
+async function extractCheckData(imageDataUrl) {
+  if (!S.anthropicKey) { showToast('Add your Anthropic API key in Settings'); return null; }
+  const base64 = imageDataUrl.split(',')[1];
+  const mediaType = imageDataUrl.split(';')[0].split(':')[1] || 'image/jpeg';
+  showLoading('AI is reading the check…');
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'x-api-key':S.anthropicKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514', max_tokens:500,
+        messages:[{ role:'user', content:[
+          { type:'image', source:{ type:'base64', media_type:mediaType, data:base64 }},
+          { type:'text', text:`Extract the following from this check image. Return ONLY valid JSON with these keys: name (payer full name as written), address (street address), city, state, zip. If a field is not visible, use an empty string. Do not include any other text.\n\nExample: {"name":"Jane Smith","address":"123 Main St","city":"Springfield","state":"IL","zip":"62701"}` }
+        ]}]
+      })
+    });
+    const data = await res.json();
+    hideLoading();
+    if (!res.ok) { console.error(data); return null; }
+    const txt = data.content?.[0]?.text || '';
+    const jsonMatch = txt.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+    return JSON.parse(jsonMatch[0]);
+  } catch(e) { hideLoading(); console.error(e); return null; }
+}
+
+// ═══════════════════════════════════════════════════════
+//  FEC.GOV SEARCH
+// ═══════════════════════════════════════════════════════
+async function searchFEC(name) {
+  if (!name) return;
+  _fecSearching = true; _fecResults = []; _fecSelected = null;
+  render();
+  try {
+    const encoded = encodeURIComponent(name);
+    const url = `https://api.open.fec.gov/v1/schedules/schedule_a/?contributor_name=${encoded}&sort=-contribution_receipt_amount&per_page=10&api_key=DEMO_KEY`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    const results = data.results || [];
+    // Deduplicate by occupation+employer
+    const seen = new Set();
+    _fecResults = [];
+    for (const r of results) {
+      const occ = (r.contributor_occupation || '').trim();
+      const emp = (r.contributor_employer  || '').trim();
+      const key = `${occ}|${emp}`;
+      if (occ || emp) {
+        if (!seen.has(key)) { seen.add(key); _fecResults.push({ name: r.contributor_name, occupation:occ, employer:emp, city:r.contributor_city, state:r.contributor_state }); }
+      }
+      if (_fecResults.length >= 4) break;
+    }
+  } catch(e) { console.error('FEC error', e); }
+  _fecSearching = false;
+  render();
+}
+
+// ═══════════════════════════════════════════════════════
+//  ACTBLUE CHECK
+// ═══════════════════════════════════════════════════════
+async function checkActBlue(donorName) {
+  if (!S.abUser || !S.abPass) { _abStatus='no-creds'; render(); return; }
+  _abStatus = 'checking'; render();
+  try {
+    // ActBlue's export API — search contributions by name
+    // NOTE: Direct browser calls to ActBlue may face CORS restrictions.
+    // If this fails, the app will prompt you to check manually.
+    const creds = btoa(`${S.abUser}:${S.abPass}`);
+    const url = `https://secure.actblue.com/api/v1/contributions?name=${encodeURIComponent(donorName)}&page=1`;
+    const res = await fetch(url, { headers:{ 'Authorization': `Basic ${creds}`, 'Content-Type':'application/json' }, mode:'cors' });
+    if (!res.ok) throw new Error('API error ' + res.status);
+    const data = await res.json();
+    const found = (data.contributions?.length || data.total_count || 0) > 0;
+    _abStatus = found ? 'found' : 'notfound';
+  } catch(e) {
+    // CORS or network error — guide user to check manually
+    _abStatus = 'cors-error';
+  }
+  render();
+}
+
+// ═══════════════════════════════════════════════════════
+//  EVERYACTION CHECK
+// ═══════════════════════════════════════════════════════
+async function checkEveryAction(donorName) {
+  if (!S.eaKey || !S.eaApp) { _eaStatus='no-creds'; render(); return; }
+  _eaStatus = 'checking'; render();
+  try {
+    const creds = btoa(`${S.eaApp}|1:${S.eaKey}`);
+    const parts = donorName.trim().split(' ');
+    const first = parts[0] || '';
+    const last  = parts.slice(1).join(' ') || '';
+    const url = `https://api.securevan.com/v4/people/find?firstName=${encodeURIComponent(first)}&lastName=${encodeURIComponent(last)}`;
+    const res = await fetch(url, { headers:{ 'Authorization': `Basic ${creds}`, 'Content-Type':'application/json' }, mode:'cors' });
+    if (!res.ok) throw new Error('API error ' + res.status);
+    const data = await res.json();
+    const found = Array.isArray(data) ? data.length > 0 : !!data.vanId;
+    _eaStatus = found ? 'found' : 'notfound';
+  } catch(e) {
+    _eaStatus = 'cors-error';
+  }
+  render();
+}
+
+// ═══════════════════════════════════════════════════════
+//  SHARED COMPONENTS
+// ═══════════════════════════════════════════════════════
+function hdr(backLbl, backFn) {
+  return `<div class="hdr">
+    <div class="logo">Field<em>Team6</em></div>
+    <div class="hdr-r">
+      ${backLbl ? `<button class="ibtn" onclick="${backFn}">← ${backLbl}</button>` : ''}
+      ${!backLbl ? `<button class="ibtn" onclick="go('settings')">⚙ Setup</button>` : ''}
+    </div>
+  </div>`;
+}
+function progBar(cur, tot, lbl) {
+  return `<div class="prog">
+    <div class="prog-lbl">${lbl}</div>
+    <div class="prog-track"><div class="prog-fill" style="width:${Math.round(cur/tot*100)}%"></div></div>
+  </div>`;
+}
+function badgeFor(c) {
+  if (c.remitType==='photo')        return `<span class="pill pill-green">📎 Remit attached</span>`;
+  if (c.remitType==='actblue')      return `<span class="pill pill-blue">🔵 ActBlue on file</span>`;
+  if (c.remitType==='everyaction')  return `<span class="pill pill-purple">🟣 EveryAction on file</span>`;
+  if (c.remitType==='manual-ab')    return `<span class="pill pill-blue">🔵 ActBlue — confirmed</span>`;
+  if (c.remitType==='manual-ea')    return `<span class="pill pill-purple">🟣 EveryAction — confirmed</span>`;
+  return '';
+}
+function abStatusHtml() {
+  if (!_abStatus) return '';
+  if (_abStatus==='checking')    return `<div class="spin-wrap"><div class="spin"></div>Checking ActBlue…</div>`;
+  if (_abStatus==='found')       return `<div class="ok-box">✅ <strong>Found in ActBlue</strong> — remit on file.</div>`;
+  if (_abStatus==='notfound')    return `<div class="warn-box">⚠️ Not found in ActBlue.</div>`;
+  if (_abStatus==='no-creds')    return `<div class="info-box">ℹ️ Add ActBlue credentials in Settings to auto-check.</div>`;
+  if (_abStatus==='cors-error')  return `<div class="warn-box">⚠️ <strong>ActBlue couldn't be reached automatically</strong> (security restriction in browsers). Please check manually, then pick your answer below.</div>`;
+  return '';
+}
+function eaStatusHtml() {
+  if (!_eaStatus) return '';
+  if (_eaStatus==='checking')    return `<div class="spin-wrap"><div class="spin"></div>Checking EveryAction…</div>`;
+  if (_eaStatus==='found')       return `<div class="ok-box">✅ <strong>Found in EveryAction</strong> — remit on file.</div>`;
+  if (_eaStatus==='notfound')    return `<div class="warn-box">⚠️ Not found in EveryAction.</div>`;
+  if (_eaStatus==='no-creds')    return `<div class="info-box">ℹ️ Add EveryAction credentials in Settings to auto-check.</div>`;
+  if (_eaStatus==='cors-error')  return `<div class="warn-box">⚠️ <strong>EveryAction couldn't be reached automatically</strong> (security restriction in browsers). Please check manually, then pick your answer below.</div>`;
+  return '';
+}
+
+// ═══════════════════════════════════════════════════════
+//  SCREENS
+// ═══════════════════════════════════════════════════════
+
+// ── HOME ──
+function scrHome() {
+  const sorted = [...checks].sort((a,b)=>parseFloat(b.amount)-parseFloat(a.amount));
+  const total  = sorted.reduce((s,c)=>s+parseFloat(c.amount||0),0);
+  const n = checks.length;
+  const missingSetup = !S.to || !S.anthropicKey;
+  return hdr() + `<div class="main" style="padding-top:0">
+    <div class="hero">
+      <div class="hero-icon">🏦</div>
+      <h1 class="hero-title">Deposit<br>Manager</h1>
+      <p class="hero-sub">Process checks, auto-fill remits, and draft your FEC email in one flow.</p>
+    </div>
+    ${missingSetup ? `<div class="warn-box">⚠️ <strong>Setup needed:</strong> Tap "⚙ Setup" above to enter your email recipients${!S.anthropicKey?' and Anthropic API key (for AI features)':''}.</div>` : ''}
+    ${n > 0 ? `
+      <div class="total-bar"><div><div class="total-lbl">Current Batch</div><div class="total-sub">${n} check${n!==1?'s':''}</div></div><div class="total-amt">${fmt$(total)}</div></div>
+      <div class="sec">Checks in Batch</div>
+      ${sorted.map((c,i)=>`<div class="chk-item">
+        <div class="chk-row">
+          <div class="chk-num">${i+1}</div>
+          <div class="chk-info">
+            <div class="chk-name">${c.name}</div>
+            <div class="chk-amt">${fmt$(c.amount)}</div>
+            <div class="chk-meta">${badgeFor(c)}${c.fecData?`<span class="pill pill-gold">FEC ✓</span>`:''}</div>
+          </div>
+          <button class="del-btn" onclick="delCheck(${c.id});render()">✕</button>
+        </div>
+      </div>`).join('')}
+      <div class="stack" style="margin-top:14px">
+        <button class="btn btn-out" onclick="startCheck()">+ Add Another Check</button>
+        <button class="btn btn-gold" onclick="go('review')">Review &amp; Generate Email →</button>
+      </div>
+    ` : `<div class="stack"><button class="btn btn-gold" onclick="startCheck()">📸 Start Processing Checks</button></div>
+      <div class="info-box" style="margin-top:18px">
+        <strong>What happens for each check:</strong><br>
+        Name → Amount → Front photo → AI reads check → FEC lookup → Back photo → Remit (auto-check ActBlue/EveryAction, or photograph) → Done. Then the app drafts your email automatically.
+      </div>`}
+  </div>`;
+}
+
+// ── SETTINGS ──
+function scrSettings() {
+  return hdr('Done','saveAndGoHome()') + `<div class="main">
+    <h1 class="stitle">Setup</h1>
+    <p class="ssub">Enter your info once — saved permanently on your device.</p>
+    <div class="sec">Your Info</div>
+    <div class="field"><label>Your Name (email signature)</label><input type="text" id="s-name" value="${S.name||''}" placeholder="Jordan Smith" autocapitalize="words"></div>
+    <div class="sec">Email Recipients</div>
+    <div class="field"><label>TO: addresses (comma-separated)</label><textarea id="s-to" rows="2" placeholder="colleague@fieldteam6.com, another@example.com">${S.to||''}</textarea></div>
+    <div class="field"><label>CC: (optional)</label><textarea id="s-cc" rows="2" placeholder="cc@example.com">${S.cc||''}</textarea></div>
+    <div class="sec">AI Features (Claude)</div>
+    <div class="info-box">Your Anthropic API key lets the app read check photos automatically and will fill in remit forms. Get one free at <strong>console.anthropic.com</strong> → "API Keys". It costs pennies per check.</div>
+    <div class="field"><label>Anthropic API Key</label><input type="password" id="s-akey" value="${S.anthropicKey||''}" placeholder="sk-ant-…"></div>
+    <div class="sec">ActBlue Integration</div>
+    <div class="info-box">Your ActBlue API credentials let the app automatically check whether a donor's remit is on file. Find these in your ActBlue dashboard → Settings → Integrations.</div>
+    <div class="field"><label>ActBlue API Username</label><input type="text" id="s-abuser" value="${S.abUser||''}" placeholder="your-api-username" autocapitalize="none"></div>
+    <div class="field"><label>ActBlue API Password</label><input type="password" id="s-abpass" value="${S.abPass||''}" placeholder="your-api-password"></div>
+    <div class="sec">EveryAction Integration</div>
+    <div class="info-box">Find your EveryAction API key and Application Name in your EveryAction admin panel → Settings → API.</div>
+    <div class="field"><label>EveryAction API Key</label><input type="password" id="s-eakey" value="${S.eaKey||''}" placeholder="your-api-key"></div>
+    <div class="field"><label>EveryAction Application Name</label><input type="text" id="s-eaapp" value="${S.eaApp||''}" placeholder="YourOrgAppName" autocapitalize="none"></div>
+    <div class="sec">Options</div>
+    <div class="field"><div class="toggle-row"><div><div class="toggle-label">Auto-search FEC.gov</div><div class="toggle-sub">Looks up occupation &amp; employer automatically</div></div><input type="checkbox" id="s-autofec" ${S.autoFEC!==false?'checked':''}></div></div>
+    <button class="btn btn-gold" onclick="saveAndGoHome()">Save &amp; Return Home</button>
+    ${checks.length>0?`<div class="div"></div><button class="btn btn-red" onclick="clearBatch()">🗑 Clear Entire Batch</button>`:''}
+  </div>`;
+}
+function saveAndGoHome() {
+  S.name         = document.getElementById('s-name')?.value?.trim()||'';
+  S.to           = document.getElementById('s-to')?.value?.trim()||'';
+  S.cc           = document.getElementById('s-cc')?.value?.trim()||'';
+  S.anthropicKey = document.getElementById('s-akey')?.value?.trim()||'';
+  S.abUser       = document.getElementById('s-abuser')?.value?.trim()||'';
+  S.abPass       = document.getElementById('s-abpass')?.value?.trim()||'';
+  S.eaKey        = document.getElementById('s-eakey')?.value?.trim()||'';
+  S.eaApp        = document.getElementById('s-eaapp')?.value?.trim()||'';
+  S.autoFEC      = document.getElementById('s-autofec')?.checked!==false;
+  saveS(); showToast('Saved ✓'); go('home');
+}
+function clearBatch() { if(confirm('Clear all checks?')){ checks=[]; go('home'); } }
+
+// ── STEP 1: NAME ──
+function scrName() {
+  const cn = checks.length+1;
+  return hdr('Home',"go('home')") + progBar(1,6,`Check #${cn} · Step 1 of 6 — Donor Name`) + `<div class="main">
+    <h1 class="stitle">Who sent this check?</h1>
+    <p class="ssub">Enter the donor's full name exactly as it appears on the check.</p>
+    <div class="field"><label>Donor Full Name</label><input type="text" id="f-name" value="${draft.name||''}" placeholder="Jane Smith" autocapitalize="words"></div>
+    <button class="btn btn-gold" onclick="saveName()">Continue →</button>
+  </div>`;
+}
+function saveName() {
+  const v = document.getElementById('f-name')?.value?.trim();
+  if (!v) { showToast('Please enter a name'); return; }
+  draft.name = v; go('n-amount');
+}
+
+// ── STEP 2: AMOUNT ──
+function scrAmount() {
+  const cn = checks.length+1;
+  return hdr('Back',"go('n-name')") + progBar(2,6,`Check #${cn} · Step 2 of 6 — Amount`) + `<div class="main">
+    <h1 class="stitle">How much is the check?</h1>
+    <p class="ssub">Enter the dollar amount on ${draft.name}'s check.</p>
+    <div class="field"><label>Amount ($)</label><input type="number" id="f-amt" value="${draft.amount||''}" placeholder="0.00" step="0.01" min="0" inputmode="decimal"></div>
+    <button class="btn btn-gold" onclick="saveAmount()">Continue →</button>
+  </div>`;
+}
+function saveAmount() {
+  const v = document.getElementById('f-amt')?.value;
+  if (!v||parseFloat(v)<=0) { showToast('Please enter a valid amount'); return; }
+  draft.amount = v; go('n-front');
+}
+
+// ── STEP 3: FRONT PHOTO + AI EXTRACTION ──
+function scrFront() {
+  const cn = checks.length+1;
+  const hasPic = !!draft.front;
+  const aiReady = hasPic && !_extracted && S.anthropicKey;
+  const aiDone  = hasPic && !!_extracted;
+
+  return hdr('Back',"go('n-amount')") + progBar(3,6,`Check #${cn} · Step 3 of 6 — Check Front + AI Read`) + `<div class="main">
+    <h1 class="stitle">Front of Check</h1>
+    <p class="ssub">Take a clear, well-lit photo of the front of ${draft.name}'s check.</p>
+    <input class="hf" type="file" accept="image/*" capture="environment" id="fi-front">
+    <div class="photo-slot${hasPic?' filled':''}" onclick="triggerFile('fi-front')">
+      ${hasPic
+        ? `<img class="photo-prev" src="${draft.front}"><button class="retake-btn" onclick="event.stopPropagation();triggerFile('fi-front')">📷 Retake</button>`
+        : `<div class="photo-empty"><div class="ei">📷</div><div class="el">Tap to open camera</div><div class="es">Front of check</div></div>`}
+    </div>
+    ${hasPic ? `<button class="save-photo-btn" onclick="openLightbox(draft.front,'check_front_${slug(draft.name)}.jpg')">📥 View / Save Photo</button>` : ''}
+    ${hasPic && S.anthropicKey && !aiDone ? `
+      <button class="btn btn-blue" onclick="runExtract()" style="margin-bottom:10px">🤖 AI: Read Check Data</button>
+      <div class="info-box">The AI will read the name &amp; address from the check to pre-fill your remit form.</div>` : ''}
+    ${aiDone ? `
+      <div class="ai-card">
+        <div class="ai-card-title">✨ AI Extracted</div>
+        <div class="ai-field"><label>Name</label><div class="val">${_extracted.name||'—'}</div></div>
+        <div class="ai-field"><label>Address</label><div class="val">${[_extracted.address,_extracted.city,_extracted.state,_extracted.zip].filter(Boolean).join(', ')||'—'}</div></div>
+        <button class="btn btn-out btn-sm" style="margin-top:6px" onclick="_extracted=null;render()">Re-extract</button>
+      </div>` : ''}
+    ${!S.anthropicKey && hasPic ? `<div class="warn-box">Add your Anthropic API key in Settings to enable AI check reading.</div>` : ''}
+    ${hasPic ? `<button class="btn btn-gold" onclick="afterFront()">Looks Good →</button>` : ''}
+  </div>`;
+}
+
+async function runExtract() {
+  if (!draft.front) return;
+  _extracted = await extractCheckData(draft.front);
+  if (_extracted) { draft.extracted = _extracted; render(); }
+  else { showToast('Could not read check — try a clearer photo'); }
+}
+
+function afterFront() {
+  if (_extracted) draft.extracted = _extracted;
+  // Kick off FEC search in background
+  if (S.autoFEC!==false && draft.name) { searchFEC(draft.name); }
+  go('n-fec');
+}
+
+// ── STEP 3b: FEC LOOKUP ──
+function scrFEC() {
+  const cn = checks.length+1;
+  const q  = _fecQuery || draft.name;
+  return hdr('Back',"go('n-front')") + progBar(3,6,`Check #${cn} · Step 3b — FEC Lookup`) + `<div class="main">
+    <h1 class="stitle">FEC.gov Lookup</h1>
+    <p class="ssub">Search for ${draft.name}'s occupation &amp; employer in FEC donation records.</p>
+    <div class="field" style="display:flex;gap:8px;align-items:flex-end">
+      <div style="flex:1"><label>Search Name</label><input type="text" id="fec-q" value="${q}" placeholder="${draft.name}"></div>
+      <button class="btn btn-out btn-sm" style="margin-top:0;white-space:nowrap" onclick="doFECSearch()">Search</button>
+    </div>
+    ${_fecSearching ? `<div class="spin-wrap"><div class="spin"></div>Searching FEC records…</div>` : ''}
+    ${!_fecSearching && _fecResults.length===0 && _fecQuery ? `<div class="warn-box">No FEC records found for "${_fecQuery}". Try a name variation, or skip and enter occupation manually below.</div>` : ''}
+    ${_fecResults.map((r,i)=>`
+      <div class="fec-result${_fecSelected===i?' selected':''}" onclick="selectFEC(${i})">
+        <div class="fec-name">${r.name}</div>
+        <div class="fec-occ">💼 ${r.occupation||'Unknown occupation'} · ${r.employer||'Unknown employer'}</div>
+        <div class="fec-meta">📍 ${[r.city,r.state].filter(Boolean).join(', ')||'Location unknown'}</div>
+      </div>`).join('')}
+    ${_fecSelected!==null ? `<div class="ok-box">✅ <strong>Selected:</strong> ${_fecResults[_fecSelected].occupation} at ${_fecResults[_fecSelected].employer}</div>` : ''}
+    <div class="div"></div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Or enter manually:</p>
+    <div class="field"><label>Occupation</label><input type="text" id="fec-occ" value="${draft.fecData?.occupation||(_fecSelected!==null?_fecResults[_fecSelected].occupation:'')}" placeholder="e.g. Attorney" autocapitalize="words"></div>
+    <div class="field"><label>Employer</label><input type="text" id="fec-emp" value="${draft.fecData?.employer||(_fecSelected!==null?_fecResults[_fecSelected].employer:'')}" placeholder="e.g. Smith Law Group" autocapitalize="words"></div>
+    <div class="stack">
+      <button class="btn btn-gold" onclick="saveFEC()">Save &amp; Continue →</button>
+      <button class="btn btn-out" onclick="skipFEC()">Skip for Now</button>
+    </div>
+  </div>`;
+}
+
+function doFECSearch() {
+  const v = document.getElementById('fec-q')?.value?.trim() || draft.name;
+  _fecQuery = v; searchFEC(v);
+}
+function selectFEC(i) { _fecSelected = i; render(); }
+function saveFEC() {
+  const occ = document.getElementById('fec-occ')?.value?.trim()||'';
+  const emp = document.getElementById('fec-emp')?.value?.trim()||'';
+  draft.fecData = { occupation:occ, employer:emp };
+  go('n-back');
+}
+function skipFEC() { draft.fecData = null; go('n-back'); }
+
+// ── STEP 4: BACK PHOTO ──
+function scrBack() {
+  const cn = checks.length+1;
+  const hasPic = !!draft.back;
+  return hdr('Back',"go('n-fec')") + progBar(4,6,`Check #${cn} · Step 4 of 6 — Check Back`) + `<div class="main">
+    <h1 class="stitle">Back of Check</h1>
+    <p class="ssub">Endorse the check first, then photograph it.</p>
+    <div class="info-box">📝 <strong>Sign &amp; endorse before photographing.</strong> Write "For Mobile Deposit Only" under your signature.</div>
+    <input class="hf" type="file" accept="image/*" capture="environment" id="fi-back">
+    <div class="photo-slot${hasPic?' filled':''}" onclick="triggerFile('fi-back')">
+      ${hasPic
+        ? `<img class="photo-prev" src="${draft.back}"><button class="retake-btn" onclick="event.stopPropagation();triggerFile('fi-back')">📷 Retake</button>`
+        : `<div class="photo-empty"><div class="ei">📷</div><div class="el">Tap to open camera</div><div class="es">Back of check (endorsed)</div></div>`}
+    </div>
+    ${hasPic ? `<button class="save-photo-btn" onclick="openLightbox(draft.back,'check_back_${slug(draft.name)}.jpg')">📥 View / Save Photo</button>` : ''}
+    ${hasPic ? `<button class="btn btn-gold" onclick="go('n-remit')">Looks Good →</button>` : ''}
+  </div>`;
+}
+
+// ── STEP 5: REMIT ──
+function scrRemit() {
+  const cn = checks.length+1;
+  const hasCreds = S.abUser || S.eaKey;
+  // Auto-check if creds present and not checked yet
+  if (hasCreds && !_abStatus && !_eaStatus && draft.name) {
+    if (S.abUser) checkActBlue(draft.name);
+    if (S.eaKey)  checkEveryAction(draft.name);
+  }
+  return hdr('Back',"go('n-back')") + progBar(5,6,`Check #${cn} · Step 5 of 6 — Remit`) + `<div class="main">
+    <h1 class="stitle">Remit for ${draft.name}</h1>
+    <p class="ssub">Check whether we have their FEC remit on file, or photograph the physical one.</p>
+    ${hasCreds?`<div class="sec">Auto-Check Results</div>${abStatusHtml()}${eaStatusHtml()}`:''}
+    ${(_abStatus==='found') ? `
+      <button class="btn btn-blue" onclick="pickRemit('manual-ab')">✅ Confirm — ActBlue on file</button><div style="height:10px"></div>` : ''}
+    ${(_eaStatus==='found') ? `
+      <button class="btn" style="background:var(--purple);color:#fff" onclick="pickRemit('manual-ea')">✅ Confirm — EveryAction on file</button><div style="height:10px"></div>` : ''}
+    <div class="div"></div>
+    <div class="sec">Choose Remit Option</div>
+    <div class="ropt" onclick="go('n-remit-photo')"><div class="ri">📄</div><div><div class="rl">I have a physical remit</div><div class="rd">I'll photograph it now</div></div></div>
+    <div class="ropt" onclick="pickRemit('actblue')"><div class="ri">🔵</div><div><div class="rl">ActBlue — on file</div><div class="rd">Remit in our ActBlue records</div></div></div>
+    <div class="ropt" onclick="pickRemit('everyaction')"><div class="ri">🟣</div><div><div class="rl">EveryAction — on file</div><div class="rd">Remit in our EveryAction records</div></div></div>
+  </div>`;
+}
+
+function pickRemit(type) { draft.remitType = type; draft.remit = null; saveCheckDone(); }
+
+// ── STEP 5b: REMIT PHOTO ──
+function scrRemitPhoto() {
+  const cn = checks.length+1;
+  const hasPic = !!draft.remit;
+  return hdr('Back',"go('n-remit')") + progBar(5,6,`Check #${cn} · Step 5 of 6 — Remit Photo`) + `<div class="main">
+    <h1 class="stitle">Photo: Remit Document</h1>
+    <p class="ssub">Take a clear photo of the FEC remit form for ${draft.name}.</p>
+    <input class="hf" type="file" accept="image/*" id="fi-remit">
+    <div class="photo-slot${hasPic?' filled':''}" onclick="triggerFile('fi-remit')">
+      ${hasPic
+        ? `<img class="photo-prev" src="${draft.remit}"><button class="retake-btn" onclick="event.stopPropagation();triggerFile('fi-remit')">📷 Retake</button>`
+        : `<div class="photo-empty"><div class="ei">📄</div><div class="el">Tap to open camera</div><div class="es">Remit document</div></div>`}
+    </div>
+    ${hasPic ? `<button class="save-photo-btn" onclick="openLightbox(draft.remit,'remit_${slug(draft.name)}.jpg')">📥 View / Save Photo</button>` : ''}
+    ${hasPic ? `<button class="btn btn-gold" onclick="finishRemitPhoto()">Save This Check →</button>` : ''}
+  </div>`;
+}
+function finishRemitPhoto() { draft.remitType='photo'; saveCheckDone(); }
+
+function saveCheckDone() { checks.push({...draft}); draft=null; go('saved'); }
+
+// ── SAVED ──
+function scrSaved() {
+  const last  = checks[checks.length-1];
+  const total = checks.reduce((s,c)=>s+parseFloat(c.amount||0),0);
+  return hdr() + `<div class="main">
+    <div class="success-icon">✅</div>
+    <div class="success-name">${last.name}</div>
+    <div class="success-amt">${fmt$(last.amount)}</div>
+    <div class="success-sub">Check saved · ${checks.length} check${checks.length!==1?'s':''} in batch</div>
+    <div class="total-bar"><div><div class="total-lbl">Batch Total</div><div class="total-sub">${checks.length} check${checks.length!==1?'s':''}</div></div><div class="total-amt">${fmt$(total)}</div></div>
+    <div class="stack">
+      <button class="btn btn-out" onclick="startCheck()">+ Add Another Check</button>
+      <button class="btn btn-gold" onclick="go('review')">Done — Review &amp; Draft Email →</button>
+    </div>
+  </div>`;
+}
+
+// ── REVIEW ──
+function scrReview() {
+  const sorted = [...checks].sort((a,b)=>parseFloat(b.amount)-parseFloat(a.amount));
+  const total  = sorted.reduce((s,c)=>s+parseFloat(c.amount||0),0);
+  return hdr('Home',"go('home')") + `<div class="main">
+    <h1 class="stitle">Review Batch</h1>
+    <p class="ssub">Confirm everything, then generate your email draft.</p>
+    <div class="total-bar"><div><div class="total-lbl">Total Deposit</div><div class="total-sub">${sorted.length} check${sorted.length!==1?'s':''}</div></div><div class="total-amt">${fmt$(total)}</div></div>
+    ${sorted.map((c,i)=>{
+      const photos = [];
+      const n = slug(c.name);
+      if (c.front) photos.push({ src:c.front, file:`check_front_${n}.jpg`, lbl:'Front' });
+      if (c.back)  photos.push({ src:c.back,  file:`check_back_${n}.jpg`,  lbl:'Back'  });
+      if (c.remit) photos.push({ src:c.remit, file:`remit_${n}.jpg`,        lbl:'Remit' });
+      return `<div class="chk-item">
+        <div class="chk-row">
+          <div class="chk-num">${i+1}</div>
+          <div class="chk-info">
+            <div class="chk-name">${c.name}</div>
+            <div class="chk-amt">${fmt$(c.amount)}</div>
+            <div class="chk-meta">
+              ${badgeFor(c)}
+              ${c.fecData?.occupation?`<span class="pill pill-gold">💼 ${c.fecData.occupation}</span>`:''}
+              ${c.extracted?.address?`<span class="pill pill-muted">📍 Address ✓</span>`:''}
+            </div>
+          </div>
+          <button class="del-btn" onclick="delCheck(${c.id});if(checks.length===0){go('home')}else{go('review')}">✕</button>
+        </div>
+        ${photos.length?`<div class="pgrid" style="margin-top:10px">
+          ${photos.map(p=>`<div class="pgrid-item" onclick="openLightbox('${p.src}','${p.file}')"><img src="${p.src}"><div class="pgrid-lbl">${p.lbl} · tap to save</div></div>`).join('')}
+        </div>`:''}
+      </div>`;
+    }).join('')}
+    <div class="info-box">💡 Tap any photo above to open it full-screen, then save it to your Camera Roll from there.</div>
+    <div class="stack" style="margin-top:10px">
+      <button class="btn btn-out" onclick="startCheck()">+ Add Another Check</button>
+      <button class="btn btn-gold" onclick="go('email')">Generate Email Draft →</button>
+    </div>
+  </div>`;
+}
+
+// ── EMAIL ──
+function scrEmail() {
+  buildEmail();
+  const subSafe  = _emailSubject.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const bodySafe = _emailBody.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
+  return hdr('Review',"go('review')") + `<div class="main">
+    <h1 class="stitle">Email Draft Ready</h1>
+    <p class="ssub">Open Gmail below, then attach your saved photos and send.</p>
+    <button class="btn btn-gold" style="margin-bottom:22px" onclick="openGmail()">✉️ Open Gmail Draft</button>
+    <div class="sec">Subject Line</div>
+    <div class="email-box">${subSafe}</div>
+    <button class="copy-btn" onclick="copyText(_emailSubject)">📋 Copy Subject</button>
+    <div class="div"></div>
+    <div class="sec">Email Body</div>
+    <div class="email-box" style="font-size:11px">${bodySafe}</div>
+    <button class="copy-btn" onclick="copyText(_emailBody)">📋 Copy Body</button>
+    <div class="div"></div>
+    <div class="sec">Photos to Attach (${_emailPhotos.length})</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Tap any photo → view full-size → save to Camera Roll → attach in Gmail.</p>
+    <div class="pgrid">${_emailPhotos.map((p,i)=>`<div class="pgrid-item" onclick="openLightbox('${p.src}','${p.file}')"><img src="${p.src}"><div class="pgrid-lbl">${p.label}</div></div>`).join('')}</div>
+    <div class="info-box" style="margin-top:14px"><strong>iPhone tip:</strong> After tapping a photo, press and hold the image → "Save to Photos." Then attach from your Camera Roll in Gmail.</div>
+    <div class="div"></div>
+    <button class="btn btn-green" onclick="finishBatch()">🎉 Done — Start New Batch</button>
+  </div>`;
+}
+
+function buildEmail() {
+  const sorted = [...checks].sort((a,b)=>parseFloat(b.amount)-parseFloat(a.amount));
+  const total  = sorted.reduce((s,c)=>s+parseFloat(c.amount||0),0);
+  const today  = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  _emailSubject = sorted.map(c=>c.name).join(', ') + ' — Check Deposit' + (sorted.length>1?'s':'');
+  let body = `Hi team,\n\nPlease find the check deposit details processed on ${today}.\n\n${'━'.repeat(40)}\n\n`;
+  sorted.forEach((c,i)=>{
+    const n = slug(c.name);
+    body += `${i+1}.  ${c.name}\n`;
+    body += `    Amount:     ${fmt$(c.amount)}\n`;
+    if (c.fecData?.occupation) body += `    Occupation: ${c.fecData.occupation}\n`;
+    if (c.fecData?.employer)   body += `    Employer:   ${c.fecData.employer}\n`;
+    if (c.extracted?.address)  body += `    Address:    ${[c.extracted.address,c.extracted.city,c.extracted.state,c.extracted.zip].filter(Boolean).join(', ')}\n`;
+    if (c.remitType==='photo')        body += `    Remit:      ATTACHED — remit_${n}.jpg\n`;
+    else if (c.remitType==='actblue' ||c.remitType==='manual-ab')   body += `    Remit:      On file — ActBlue\n`;
+    else if (c.remitType==='everyaction'||c.remitType==='manual-ea') body += `    Remit:      On file — EveryAction\n`;
+    body += '\n';
+  });
+  body += `${'━'.repeat(40)}\nTOTAL DEPOSITED: ${fmt$(total)}\n`;
+  const atts = [];
+  sorted.forEach(c=>{ const n=slug(c.name); if(c.front)atts.push(`check_front_${n}.jpg`); if(c.back)atts.push(`check_back_${n}.jpg`); if(c.remit)atts.push(`remit_${n}.jpg`); });
+  if (atts.length) { body += `\nAttachments (${atts.length}):\n`; atts.forEach(f=>{ body+=`  • ${f}\n`; }); }
+  if (S.name) body += `\nBest,\n${S.name}`;
+  _emailBody = body;
+  _emailPhotos = [];
+  sorted.forEach(c=>{ const n=slug(c.name);
+    if(c.front) _emailPhotos.push({src:c.front,file:`check_front_${n}.jpg`,label:c.name+' Front'});
+    if(c.back)  _emailPhotos.push({src:c.back, file:`check_back_${n}.jpg`, label:c.name+' Back'});
+    if(c.remit) _emailPhotos.push({src:c.remit,file:`remit_${n}.jpg`,      label:c.name+' Remit'});
+  });
+}
+
+function openGmail() {
+  const url = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(S.to||'')}&su=${encodeURIComponent(_emailSubject)}&body=${encodeURIComponent(_emailBody)}${S.cc?`&cc=${encodeURIComponent(S.cc)}`:''}`;
+  window.open(url,'_blank');
+}
+function finishBatch() { if(confirm('Clear batch and start fresh?')){ checks=[]; go('home'); } }
+
+// ═══════════════════════════════════════════════════════
+//  FILE INPUT LISTENERS
+// ═══════════════════════════════════════════════════════
+function attachListeners() {
+  function wire(id, key, afterFn) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', e=>{
+      const f = e.target.files[0]; if(!f) return;
+      readFile(f, data=>{ if(draft) draft[key]=data; render(); if(afterFn) afterFn(); });
+    });
+  }
+  wire('fi-front','front');
+  wire('fi-back','back');
+  wire('fi-remit','remit');
+  // Focus
+  const fn = document.getElementById('f-name'); if(fn) setTimeout(()=>fn.focus(),120);
+  const fa = document.getElementById('f-amt');  if(fa) setTimeout(()=>fa.focus(),120);
+  // Enter key
+  document.getElementById('f-name')?.addEventListener('keydown',e=>{ if(e.key==='Enter') saveName(); });
+  document.getElementById('f-amt')?.addEventListener('keydown', e=>{ if(e.key==='Enter') saveAmount(); });
+}
+
+// ═══════════════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════════════
+const SCREENS = {
+  home:'scrHome', settings:'scrSettings',
+  'n-name':'scrName', 'n-amount':'scrAmount',
+  'n-front':'scrFront', 'n-fec':'scrFEC',
+  'n-back':'scrBack', 'n-remit':'scrRemit',
+  'n-remit-photo':'scrRemitPhoto',
+  saved:'scrSaved', review:'scrReview', email:'scrEmail'
+};
+function render() {
+  document.getElementById('app').innerHTML = (window[SCREENS[step]] || scrHome)();
+  attachListeners();
+}
+render();
+</script>
+</body>
+</html>
