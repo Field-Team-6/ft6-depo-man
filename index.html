@@ -307,8 +307,8 @@ async function generateRemitPDF(fields){
     });
     const filledBytes = await pdfDoc.save();
     hideLoading();
-    const parts=(fields.name||"Donor").trim().split(/\s+/);
-    const first=parts[0]||"Donor"; const last=parts.slice(1).join("")||"Unknown";
+    const first=(draft&&draft._fname)||((fields.name||"Donor").trim().split(/\s+/)[0])||"Donor";
+    const last=(draft&&draft._lname)||((fields.name||"Donor").trim().split(/\s+/).slice(1).join(""))||"Unknown";
     const now=new Date(); const yyyy=now.getFullYear(); const mm=String(now.getMonth()+1).padStart(2,"0"); const dd=String(now.getDate()).padStart(2,"0");
     const fname=`Remit_${first}${last}_${yyyy}_${mm}_${dd}.pdf`;
     return { bytes:filledBytes, filename:fname };
@@ -503,7 +503,7 @@ function delCheck(id){ checks=checks.filter(c=>c.id!==id); render(); }
 // START A NEW CHECK
 function startCheck(){
   draft={
-    id:Date.now(), name:"", amount:"",
+    id:Date.now(), name:"", _fname:"", _lname:"", amount:"",
     front:null, back:null,
     extracted:null, fecData:null,
     remitType:null, remit:null, remitPdfUrl:null, remitPdfFilename:null,
@@ -555,7 +555,7 @@ function scrRead(){
     ${S.anthropicKey?`<button class="btn btn-gold" onclick="runExtract()">🤖 AI: Read Check Now</button>`:`<div class="warn-box">⚠️ Add your Anthropic API key in Settings to enable AI reading.</div>`}
     <div class="div"></div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:15px">Or enter manually:</p>
-    <div class="field"><label>Donor Full Name</label><input type="text" id="f-name" value="${draft.name||""}" placeholder="Jane Smith" autocapitalize="words"></div>
+    <div class="row2"><div class="field"><label>First Name</label><input type="text" id="f-fname" value="${draft._fname||""}" placeholder="Jane" autocapitalize="words"></div><div class="field"><label>Last Name</label><input type="text" id="f-lname" value="${draft._lname||""}" placeholder="Smith" autocapitalize="words"></div></div>
     <div class="field"><label>Donation Amount ($)</label><input type="number" id="f-amt" value="${draft.amount||""}" placeholder="0.00" step="0.01" min="0" inputmode="decimal"></div>
     <div class="field"><label>Street Address</label><input type="text" id="f-addr" value="" placeholder="123 Main St" autocapitalize="words"></div>
     <div class="row2">
@@ -568,7 +568,7 @@ function scrRead(){
     <p class="ssub">Here\'s what I read from the check. Please review and correct anything that looks wrong.</p>
     <div class="ai-card">
       <div class="ai-card-title">✨ AI Reading — Please Confirm</div>
-      <div class="field"><label>Donor Full Name</label><input type="text" id="f-name" value="${ext.name||""}" placeholder="Jane Smith" autocapitalize="words"></div>
+      <div class="row2"><div class="field"><label>First Name</label><input type="text" id="f-fname" value="${draft._fname||(ext.name||"").split(" ")[0]}" placeholder="Jane" autocapitalize="words"></div><div class="field"><label>Last Name</label><input type="text" id="f-lname" value="${draft._lname||(ext.name||"").split(" ").slice(1).join(" ")}" placeholder="Smith" autocapitalize="words"></div></div>
       <div class="field"><label>Donation Amount ($)</label><input type="number" id="f-amt" value="${ext.amount||draft.amount||""}" placeholder="0.00" step="0.01" min="0" inputmode="decimal"></div>
       <div class="field"><label>Street Address</label><input type="text" id="f-addr" value="${ext.address||""}" placeholder="123 Main St" autocapitalize="words"></div>
       <div class="row2">
@@ -588,20 +588,24 @@ async function runExtract(){
   else showToast("Could not read check — try a clearer photo or enter manually");
 }
 function saveManual(){
-  const name=document.getElementById("f-name")?.value?.trim();
+  const fname=document.getElementById("f-fname")?.value?.trim();
+  const lname=document.getElementById("f-lname")?.value?.trim();
   const amt=document.getElementById("f-amt")?.value;
-  if(!name){ showToast("Please enter donor name"); return; }
+  if(!fname||!lname){ showToast("Please enter first and last name"); return; }
   if(!amt||parseFloat(amt)<=0){ showToast("Please enter a valid amount"); return; }
-  draft.name=name; draft.amount=amt;
+  const name=fname+" "+lname;
+  draft._fname=fname; draft._lname=lname; draft.name=name; draft.amount=amt;
   draft.extracted={ name, amount:parseFloat(amt), address:document.getElementById("f-addr")?.value?.trim()||"", city:document.getElementById("f-city")?.value?.trim()||"", state:document.getElementById("f-state")?.value?.trim()||"", zip:document.getElementById("f-zip")?.value?.trim()||"" };
   go("s-remit-q");
 }
 function confirmExtracted(){
-  const name=document.getElementById("f-name")?.value?.trim();
+  const fname=document.getElementById("f-fname")?.value?.trim();
+  const lname=document.getElementById("f-lname")?.value?.trim();
   const amt=document.getElementById("f-amt")?.value;
-  if(!name){ showToast("Please enter donor name"); return; }
+  if(!fname||!lname){ showToast("Please enter first and last name"); return; }
   if(!amt||parseFloat(amt)<=0){ showToast("Please enter a valid amount"); return; }
-  draft.name=name; draft.amount=amt;
+  const name=fname+" "+lname;
+  draft._fname=fname; draft._lname=lname; draft.name=name; draft.amount=amt;
   draft.extracted={ ...draft.extracted, name, amount:parseFloat(amt), address:document.getElementById("f-addr")?.value?.trim()||"", city:document.getElementById("f-city")?.value?.trim()||"", state:document.getElementById("f-state")?.value?.trim()||"", zip:document.getElementById("f-zip")?.value?.trim()||"" };
   go("s-remit-q");
 }
