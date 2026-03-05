@@ -350,25 +350,21 @@ async function doGenerateRemit(){
 // ═══════════════════════════════════════════════════════
 function buildEmailContent(){
   const sorted=[...checks].sort((a,b)=>parseFloat(b.amount)-parseFloat(a.amount));
-  const total=sorted.reduce((s,c)=>s+parseFloat(c.amount||0),0);
-  const today=new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
-  _emailSubject = sorted.map(c=>c.name).join(", ")+" — Check Deposit"+(sorted.length>1?"s":"");
-  let body = `Hi team,\n\nPlease find below the check deposit details processed on ${today}.\n\n${"━".repeat(40)}\n\n`;
-  sorted.forEach((c,i)=>{
-    body+=`${i+1}.  ${c.name}\n`;
-    body+=`    Amount:     ${fmt$(c.amount)}\n`;
-    if(c.extracted?.address) body+=`    Address:    ${[c.extracted.address,c.extracted.city,c.extracted.state,c.extracted.zip].filter(Boolean).join(", ")}\n`;
-    if(c.fecData?.occupation) body+=`    Occupation: ${c.fecData.occupation}\n`;
-    if(c.fecData?.employer) body+=`    Employer:   ${c.fecData.employer}\n`;
-    if(c.remitType==="photo") body+=`    Remit:      📎 ATTACHED (physical remit photo)\n`;
-    else if(c.remitType==="pdf-generated") body+=`    Remit:      📝 ATTACHED (generated PDF — ${c.remitPdfFilename||"Remit.pdf"})\n`;
-    else if(c.remitType==="actblue"||c.remitType==="manual-ab") body+=`    Remit:      ✅ On file in ActBlue\n`;
-    else if(c.remitType==="everyaction"||c.remitType==="manual-ea") body+=`    Remit:      ✅ On file in EveryAction\n`;
-    else body+=`    Remit:      ⚠️ Pending\n`;
-    body+="\n";
+  const n=sorted.length;
+  // Subject: "Checks deposited from Name1, Name2, Name3"
+  _emailSubject = "Checks deposited from "+sorted.map(c=>c.name).join(", ");
+  // Body matching Jason's real template
+  let body = `Hello crew,\n\nJust deposited the following ${n} check${n!==1?"s":""} into our FIELD TEAM 6 INC account:\n\n`;
+  sorted.forEach(c=>{
+    let remitNote = "";
+    if(c.remitType==="photo") remitNote="remit attached";
+    else if(c.remitType==="pdf-generated") remitNote="remit attached";
+    else if(c.remitType==="actblue"||c.remitType==="manual-ab") remitNote="remit in ActBlue";
+    else if(c.remitType==="everyaction"||c.remitType==="manual-ea") remitNote="remit in EveryAction";
+    else remitNote="remit pending";
+    body+=`- ${c.name} for ${fmt$(c.amount)} - ${remitNote}\n`;
   });
-  body+=`${"━".repeat(40)}\nTOTAL DEPOSITED: ${fmt$(total)}\n`;
-  if(S.name) body+=`\nBest,\n${S.name}`;
+  body+=`\nPictures of the front and back of the checks attached. Thank you!\n\nIn Solidarity,\nJason Berlin (he/him)\nExecutive Director, Field Team 6\nRegister • Volunteer • Donate`;
   _emailBody=body;
   return { subject:_emailSubject, body };
 }
