@@ -151,7 +151,7 @@ const REMIT_IMG_B64 = "/9j/4AAQSkZJRgABAgAAAQABAAD/wAARCATsA7gDACIAAREBAhEB/9sAQ
 // ═══════════════════════════════════════════════════════
 let S = {};
 try { S = JSON.parse(localStorage.getItem("ft6_s3")||"{}"); } catch(e){}
-S = Object.assign({ name:"", to:"", cc:"", anthropicKey:"", abUser:"", abPass:"", eaKey:"", eaApp:"", autoFEC:true, gdriveFolderId:"" }, S);
+S = Object.assign({ name:"", to:"", cc:"", anthropicKey:"", abUser:"", abPass:"", eaKey:"", eaApp:"", autoFEC:true, gdriveFolderId:"", scriptUrl:"" }, S);
 function saveS(){ localStorage.setItem("ft6_s3", JSON.stringify(S)); }
 
 // ═══════════════════════════════════════════════════════
@@ -249,27 +249,32 @@ async function searchFEC(name){
 //  ACTBLUE / EVERYACTION
 // ═══════════════════════════════════════════════════════
 async function checkActBlue(name){
-  if(!S.abUser||!S.abPass){ draft._abStatus="no-creds"; render(); return; }
+  if(!S.scriptUrl){ draft._abStatus="no-creds"; render(); return; }
   draft._abStatus="checking"; render();
   try{
-    const creds=btoa(`${S.abUser}:${S.abPass}`);
-    const res=await fetch(`https://secure.actblue.com/api/v1/contributions?search=${encodeURIComponent(name)}`,{ headers:{"Authorization":`Basic ${creds}`,"Content-Type":"application/json"}, mode:"cors" });
-    if(!res.ok) throw new Error("ActBlue API "+res.status);
+    const res=await fetch(S.scriptUrl,{
+      method:"POST",
+      headers:{"Content-Type":"text/plain"},
+      body:JSON.stringify({ action:"checkActBlue", name:name })
+    });
     const data=await res.json();
-    draft._abStatus=(data.contributions?.length||data.total_count||0)>0?"found":"notfound";
+    if(data.error){ draft._abStatus="cors-error"; }
+    else { draft._abStatus=data.found?"found":"notfound"; }
   }catch(e){ draft._abStatus="cors-error"; }
   render();
 }
 async function checkEveryAction(name){
-  if(!S.eaKey||!S.eaApp){ draft._eaStatus="no-creds"; render(); return; }
+  if(!S.scriptUrl){ draft._eaStatus="no-creds"; render(); return; }
   draft._eaStatus="checking"; render();
   try{
-    const creds=btoa(`${S.eaApp}|1:${S.eaKey}`);
-    const parts=name.trim().split(" "); const first=parts[0]||""; const last=parts.slice(1).join(" ")||"";
-    const res=await fetch(`https://api.securevan.com/v4/people/find?firstName=${encodeURIComponent(first)}&lastName=${encodeURIComponent(last)}`,{ headers:{"Authorization":`Basic ${creds}`,"Content-Type":"application/json"}, mode:"cors" });
-    if(!res.ok) throw new Error("EA API "+res.status);
+    const res=await fetch(S.scriptUrl,{
+      method:"POST",
+      headers:{"Content-Type":"text/plain"},
+      body:JSON.stringify({ action:"checkEveryAction", name:name })
+    });
     const data=await res.json();
-    draft._eaStatus=(Array.isArray(data)?data.length>0:!!data.vanId)?"found":"notfound";
+    if(data.error){ draft._eaStatus="cors-error"; }
+    else { draft._eaStatus=data.found?"found":"notfound"; }
   }catch(e){ draft._eaStatus="cors-error"; }
   render();
 }
@@ -370,47 +375,33 @@ function buildEmailContent(){
 }
 
 async function createGmailDraft(){
-  if(!S.anthropicKey){ showToast("Anthropic API key needed in Settings"); return; }
+  if(!S.scriptUrl){
+    _gmailStatus="error";
+    _gmailMsg="Google Apps Script URL not set — go to ⚙ Setup and paste in your Script URL.";
+    render(); return;
+  }
   _gmailStatus="sending"; _gmailMsg="Creating Gmail draft…"; render();
   const {subject, body} = buildEmailContent();
-  const toAddr = S.to||"";
-  const ccAddr = S.cc||"";
-  const prompt = `Create a Gmail draft email with the following details. Send it to the drafts folder only — do NOT send it.
-
-FROM: jason@fieldteam6.org
-TO: ${toAddr}
-${ccAddr?"CC: "+ccAddr:""}
-SUBJECT: ${subject}
-
-BODY:
-${body}
-
-Please create this as a draft in the Gmail account jason@fieldteam6.org. Use the gmail_create_draft tool.`;
-
   try{
-    const res = await fetch("https://api.anthropic.com/v1/messages",{
+    const res = await fetch(S.scriptUrl, {
       method:"POST",
-      headers:{"Content-Type":"application/json","x-api-key":S.anthropicKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({
-        model:"claude-sonnet-4-20250514", max_tokens:1000,
-        messages:[{role:"user",content:prompt}],
-        mcp_servers:[{"type":"url","url":"https://gmail.mcp.claude.com/mcp","name":"gmail-mcp"}]
-      })
+      headers:{"Content-Type":"text/plain"},
+      body: JSON.stringify({ action:"createDraft", subject:subject, body:body, to:S.to||"", cc:S.cc||"" })
     });
     const data = await res.json();
-    hideLoading();
-    if(!res.ok){ _gmailStatus="error"; _gmailMsg="API error: "+(data.error?.message||JSON.stringify(data)); render(); return; }
-    // Check if draft was created
-    const hasToolUse = data.content?.some(b=>b.type==="mcp_tool_use"||b.type==="tool_use");
-    const hasToolResult = data.content?.some(b=>b.type==="mcp_tool_result"||b.type==="tool_result");
-    const textContent = data.content?.filter(b=>b.type==="text").map(b=>b.text).join(" ")||"";
-    if(hasToolUse||hasToolResult||textContent.toLowerCase().includes("draft")){
-      _gmailStatus="done"; _gmailMsg="✅ Draft saved to your Gmail drafts folder! Open Gmail to review and send.";
+    if(data.success){
+      _gmailStatus="done";
+      _gmailMsg="Starred draft saved in your Gmail! Open your Drafts folder to review and send.";
     } else {
-      _gmailStatus="error"; _gmailMsg="Couldn\'t confirm draft creation. Response: "+textContent.slice(0,200);
+      _gmailStatus="error";
+      _gmailMsg=data.error||"Unknown error from script.";
     }
     render();
-  }catch(e){ _gmailStatus="error"; _gmailMsg="Error: "+e.message; render(); }
+  }catch(e){
+    _gmailStatus="error";
+    _gmailMsg="Could not reach your Google Apps Script. Check the URL in Setup. Error: "+e.message;
+    render();
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -482,6 +473,9 @@ function scrSettings(){
   <div class="sec">AI Features (Claude)</div>
   <div class="info-box">Your Anthropic API key lets the app read check photos and look up FEC records. Get one at <strong>console.anthropic.com</strong> → "API Keys". It costs pennies per check.</div>
   <div class="field"><label>Anthropic API Key</label><input type="password" id="s-akey" value="${S.anthropicKey||""}" placeholder="sk-ant-…"></div>
+  <div class="sec">Google Apps Script</div>
+  <div class="info-box">This is the magic link that connects the app to your Gmail, ActBlue, and EveryAction. You'll get this URL after following the setup instructions. Paste it here.</div>
+  <div class="field"><label>Google Apps Script URL</label><input type="text" id="s-scripturl" value="${S.scriptUrl||''}" placeholder="https://script.google.com/macros/s/..." autocapitalize="none" autocorrect="off"></div>
   <div class="sec">ActBlue Integration</div>
   <div class="info-box">Lets the app automatically check if a donor\'s remit is on file. Find credentials in ActBlue dashboard → Settings → Integrations.</div>
   <div class="field"><label>ActBlue API Username</label><input type="text" id="s-abuser" value="${S.abUser||""}" placeholder="your-api-username" autocapitalize="none"></div>
@@ -496,7 +490,7 @@ function scrSettings(){
   ${checks.length>0?`<div class="div"></div><button class="btn btn-red" onclick="clearBatch()">🗑 Clear Entire Batch</button>`:""}
   </div>`;
 }
-function saveAndGoHome(){ S.name=document.getElementById("s-name")?.value?.trim()||""; S.to=document.getElementById("s-to")?.value?.trim()||""; S.cc=document.getElementById("s-cc")?.value?.trim()||""; S.anthropicKey=document.getElementById("s-akey")?.value?.trim()||""; S.abUser=document.getElementById("s-abuser")?.value?.trim()||""; S.abPass=document.getElementById("s-abpass")?.value?.trim()||""; S.eaKey=document.getElementById("s-eakey")?.value?.trim()||""; S.eaApp=document.getElementById("s-eaapp")?.value?.trim()||""; S.autoFEC=document.getElementById("s-autofec")?.checked!==false; saveS(); showToast("Saved ✓"); go("home"); }
+function saveAndGoHome(){ S.name=document.getElementById("s-name")?.value?.trim()||""; S.to=document.getElementById("s-to")?.value?.trim()||""; S.cc=document.getElementById("s-cc")?.value?.trim()||""; S.anthropicKey=document.getElementById("s-akey")?.value?.trim()||""; S.abUser=document.getElementById("s-abuser")?.value?.trim()||""; S.abPass=document.getElementById("s-abpass")?.value?.trim()||""; S.eaKey=document.getElementById("s-eakey")?.value?.trim()||""; S.eaApp=document.getElementById("s-eaapp")?.value?.trim()||""; S.autoFEC=document.getElementById("s-autofec")?.checked!==false; S.scriptUrl=document.getElementById("s-scripturl")?.value?.trim()||""; saveS(); showToast("Saved ✓"); go("home"); }
 function clearBatch(){ if(confirm("Clear all checks in batch?")){ checks=[]; go("home"); } }
 function delCheck(id){ checks=checks.filter(c=>c.id!==id); render(); }
 
@@ -698,8 +692,8 @@ function scrRemitCheck(){
   const cn=checks.length+1;
   const ab=draft._abStatus; const ea=draft._eaStatus;
   const noCreds=!S.abUser&&!S.abPass&&!S.eaKey&&!S.eaApp;
-  const abHtml = !S.abUser&&!S.abPass?`<div class="info-box">ℹ️ ActBlue credentials not set up — <button class="ibtn" onclick="go(\'settings\')">Add in Settings</button></div>`:ab==="checking"?`<div class="spin-wrap"><div class="spin"></div>Checking ActBlue…</div>`:ab==="found"?`<div class="ok-box">✅ <strong>Found in ActBlue</strong> — remit on file.</div>`:ab==="notfound"?`<div class="warn-box">⚠️ Not found in ActBlue.</div>`:`<div class="warn-box">⚠️ ActBlue couldn\'t be reached automatically. Please check manually and pick an answer below.</div>`;
-  const eaHtml = !S.eaKey&&!S.eaApp?`<div class="info-box">ℹ️ EveryAction credentials not set up — <button class="ibtn" onclick="go(\'settings\')">Add in Settings</button></div>`:ea==="checking"?`<div class="spin-wrap"><div class="spin"></div>Checking EveryAction…</div>`:ea==="found"?`<div class="ok-box">✅ <strong>Found in EveryAction</strong> — remit on file.</div>`:ea==="notfound"?`<div class="warn-box">⚠️ Not found in EveryAction.</div>`:`<div class="warn-box">⚠️ EveryAction couldn\'t be reached automatically. Please check manually and pick an answer below.</div>`;
+  const abHtml = !S.abUser&&!S.abPass?`<div class="info-box">ℹ️ ActBlue credentials not set up — <button class="ibtn" onclick="go(\'settings\')">Add in Settings</button></div>`:ab==="checking"?`<div class="spin-wrap"><div class="spin"></div>Checking ActBlue…</div>`:ab==="found"?`<div class="ok-box">✅ <strong>Found in ActBlue</strong> — remit on file.</div>`:ab==="notfound"?`<div class="warn-box">⚠️ Not found in ActBlue.</div>`:`<div class="warn-box">⚠️ ActBlue auto-check unavailable — browser security prevents direct API calls. Please check ActBlue manually, then use the buttons below.</div>`;
+  const eaHtml = !S.eaKey&&!S.eaApp?`<div class="info-box">ℹ️ EveryAction credentials not set up — <button class="ibtn" onclick="go(\'settings\')">Add in Settings</button></div>`:ea==="checking"?`<div class="spin-wrap"><div class="spin"></div>Checking EveryAction…</div>`:ea==="found"?`<div class="ok-box">✅ <strong>Found in EveryAction</strong> — remit on file.</div>`:ea==="notfound"?`<div class="warn-box">⚠️ Not found in EveryAction.</div>`:`<div class="warn-box">⚠️ EveryAction auto-check unavailable — browser security prevents direct API calls. Please check EveryAction manually, then use the buttons below.</div>`;
   return hdrBar("Back","go(\'s-remit-q\')")+progBar(5,7,`Check #${cn} · Step 5 of 7 — Check Records`)+`<div class="main">
   <h1 class="stitle">Checking for Remit On File</h1>
   <p class="ssub">Searching ActBlue and EveryAction for ${draft.name}\'s remit…</p>
@@ -807,6 +801,7 @@ function scrReview(){
 ${_emailBody.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/\n/g,"&#10;")}</div>
   <div class="div"></div>
   ${_gmailStatus==="done"?`<div class="ok-box">✅ <strong>Draft created!</strong> ${_gmailMsg}<br><a href="https://mail.google.com/mail/#drafts" target="_blank" style="color:var(--gold);text-decoration:underline">Open Gmail Drafts →</a></div>`:
+    _gmailStatus==="auth-needed"?`<div class="info-box">ℹ️ <strong>Gmail needs authorization.</strong> Tap <strong>Open Gmail Manually</strong> below — your subject and body will be pre-filled and ready to send.<br><button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="openGmailFallback()">✉️ Open Gmail Manually</button></div>`:
     _gmailStatus==="error"?`<div class="warn-box">⚠️ <strong>Draft failed:</strong> ${_gmailMsg}<br><button class="btn btn-out btn-sm" style="margin-top:8px" onclick="openGmailFallback()">Open Gmail Manually</button></div>`:
     _gmailStatus==="sending"?`<div class="spin-wrap"><div class="spin"></div>Creating Gmail draft…</div>`:""}
   <div class="stack">
