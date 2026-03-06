@@ -800,13 +800,26 @@ function scrReview(){
 
 ${_emailBody.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/\n/g,"&#10;")}</div>
   <div class="div"></div>
-  ${_gmailStatus==="done"?`<div class="ok-box">✅ <strong>Draft created!</strong> ${_gmailMsg}<br><a href="https://mail.google.com/mail/#drafts" target="_blank" style="color:var(--gold);text-decoration:underline">Open Gmail Drafts →</a></div>`:
-    _gmailStatus==="auth-needed"?`<div class="info-box">ℹ️ <strong>Gmail needs authorization.</strong> Tap <strong>Open Gmail Manually</strong> below — your subject and body will be pre-filled and ready to send.<br><button class="btn btn-gold btn-sm" style="margin-top:8px" onclick="openGmailFallback()">✉️ Open Gmail Manually</button></div>`:
+  <div class="sec">📎 Photos to Attach to Email</div>
+  <p class="ssub" style="margin-top:-8px;margin-bottom:12px">Tap each photo to save it to your camera roll, then attach them to the draft in Gmail.</p>
+  <div class="pgrid">
+  ${(()=>{
+    const allPhotos=[];
+    sorted.forEach(c=>{
+      const n=slug(c.name);
+      if(c.front) allPhotos.push({src:c.front,file:`check_front_${n}.jpg`,lbl:c.name+" — Front"});
+      if(c.back)  allPhotos.push({src:c.back, file:`check_back_${n}.jpg`, lbl:c.name+" — Back"});
+      if(c.remit) allPhotos.push({src:c.remit,file:`remit_${n}.jpg`,      lbl:c.name+" — Remit"});
+    });
+    return allPhotos.map(p=>`<div class="pgrid-item" onclick="openLightbox('${p.src}','${p.file}')"><img src="${p.src}"><div class="pgrid-lbl">${p.lbl}</div></div>`).join("");
+  })()}
+  </div>
+  <div class="div"></div>
+  ${_gmailStatus==="done"?`<div class="ok-box">✅ <strong>Starred draft created!</strong> ${_gmailMsg}<br><a href="https://mail.google.com/mail/#drafts" target="_blank" style="color:var(--gold);text-decoration:underline">Open Gmail Drafts →</a></div>`:
     _gmailStatus==="error"?`<div class="warn-box">⚠️ <strong>Draft failed:</strong> ${_gmailMsg}<br><button class="btn btn-out btn-sm" style="margin-top:8px" onclick="openGmailFallback()">Open Gmail Manually</button></div>`:
     _gmailStatus==="sending"?`<div class="spin-wrap"><div class="spin"></div>Creating Gmail draft…</div>`:""}
   <div class="stack">
-    ${_gmailStatus!=="done"?`<button class="btn btn-gold" onclick="createGmailDraft()">✉️ Create Gmail Draft</button>`:""}
-    <button class="btn btn-out" onclick="openGmailFallback()">Open Gmail Manually</button>
+    ${_gmailStatus!=="done"?`<button class="btn btn-gold" onclick="createGmailDraft()">✉️ Create Starred Gmail Draft</button>`:""}
     <button class="btn btn-out" onclick="startCheck()">+ Add Another Check</button>
     ${_gmailStatus==="done"?`<button class="btn btn-red" onclick="finishBatch()">🎉 Done — Clear Batch</button>`:""}
   </div>
