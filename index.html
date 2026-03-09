@@ -357,9 +357,9 @@ function buildEmailContent(){
   const sorted=[...checks].sort((a,b)=>parseFloat(b.amount)-parseFloat(a.amount));
   const n=sorted.length;
   // Subject: "Checks deposited from Name1, Name2, Name3"
-  _emailSubject = "Checks deposited from "+sorted.map(c=>c.name).join(", ");
+  _emailSubject = (sorted.length===1?"Check":"Checks")+" deposited from "+sorted.map(c=>c.name).join(", ");
   // Body matching Jason's real template
-  let body = `Hello crew,\n\nJust deposited the following ${n} check${n!==1?"s":""} into our FIELD TEAM 6 INC account:\n\n`;
+  let body = `Hello crew,\n\nJust deposited the following ${n===1?"1 check":""+n+" checks"} into our FIELD TEAM 6 INC account:\n\n`;
   sorted.forEach(c=>{
     let remitNote = "";
     if(c.remitType==="photo") remitNote="remit attached";
@@ -369,7 +369,7 @@ function buildEmailContent(){
     else remitNote="remit pending";
     body+=`- ${c.name} for ${fmt$(c.amount)} - ${remitNote}\n`;
   });
-  body+=`\nPictures of the front and back of the checks attached. Thank you!\n\nIn Solidarity,\nJason Berlin (he/him)\nExecutive Director, Field Team 6\nRegister • Volunteer • Donate`;
+  body+=`\nPictures of the front and back of the checks attached. Thank you!`;
   _emailBody=body;
   return { subject:_emailSubject, body };
 }
