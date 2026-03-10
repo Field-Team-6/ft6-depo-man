@@ -253,7 +253,7 @@ async function generateAndDownloadRemit(fields) {
         b64 = btoa(b64);
         const res = await fetch(S.scriptUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify({ action: 'uploadRemitPDF', filename: fname, pdfBase64: b64 })
         });
         const data = await res.json();
@@ -754,7 +754,7 @@ function scrConfirm() {
     <p class="ssub">Review and correct the fields below. The AI has pre-filled what it could read from the check.</p>
     ${aiDone ? `<div class="ok-box" style="margin-bottom:14px">✨ <strong>AI filled in the fields below</strong> — review and correct if needed.</div>` : `<div class="info-box" style="margin-bottom:14px">Fill in the donor details below — or go back and tap the AI button on the previous screen.</div>`}
     <div class="field"><label>Donor Full Name *</label><input type="text" id="f-name" value="${draft.name||ex.name||''}" placeholder="Jane Smith" autocapitalize="words"></div>
-    <div class="field"><label>Amount ($) *</label><input type="text" id="f-amt" value="${draft.amount||ex.amount||''}" placeholder="0.00" inputmode="decimal"></div>
+    <div class="field"><label>Amount ($) *</label><input type="text" id="f-amt" value="${(draft.amount||ex.amount) ? fmt$(draft.amount||ex.amount) : ''}" placeholder="$0.00" inputmode="decimal"></div>
     <div class="field"><label>Address</label><input type="text" id="f-addr" value="${ex.address||''}" placeholder="123 Main St" autocapitalize="words"></div>
     <div class="row2">
       <div class="field"><label>City</label><input type="text" id="f-city" value="${ex.city||''}" placeholder="Springfield" autocapitalize="words"></div>
@@ -1070,7 +1070,7 @@ async function sendDraftToGmail() {
     const url = S.scriptUrl;
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({
         action:  'createDraft',
         subject: _emailSubject,
