@@ -571,7 +571,7 @@ function scrHome() {
     ` : `<div class="stack"><button class="btn btn-gold" onclick="startCheck()">📸 Start Processing Checks</button></div>
       <div class="info-box" style="margin-top:18px">
         <strong>What happens for each check:</strong><br>
-        Front photo → Back photo → AI reads check → Remit (auto-check ActBlue/EveryAction, or photograph) → FEC lookup → Done. Then the app drafts your email automatically.
+        Front photo → Back photo + AI reads check → Confirm donor info → Remit (auto-check ActBlue/EveryAction, or photograph) → FEC lookup → Done. Then the app drafts your email automatically.
       </div>`}
   </div>`;
 }
@@ -613,13 +613,10 @@ function saveAndGoHome() {
 }
 function clearBatch() { if(confirm('Clear all checks?')){ checks=[]; go('home'); } }
 
-// ── STEP 1: FRONT PHOTO + AI EXTRACTION ──
+// ── STEP 1: FRONT PHOTO ──
 function scrFront() {
   const cn = checks.length+1;
   const hasPic = !!draft.front;
-  const aiReady = hasPic && !_extracted && S.anthropicKey;
-  const aiDone  = hasPic && !!_extracted;
-
   return hdr('Home',"go('home')") + progBar(1,5,`Check #${cn} · Step 1 of 5 — Front of Check`) + `<div class="main">
     <h1 class="stitle">Front of Check</h1>
     <p class="ssub">Take a clear, well-lit photo of the front of the check.</p>
@@ -630,31 +627,8 @@ function scrFront() {
         : `<div class="photo-empty"><div class="ei">📷</div><div class="el">Tap to open camera</div><div class="es">Front of check</div></div>`}
     </div>
     ${hasPic ? `<button class="save-photo-btn" onclick="openLightbox(draft.front,'check_front.jpg')">📥 View / Save Photo</button>` : ''}
-    ${hasPic && S.anthropicKey && !aiDone ? `
-      <button class="btn btn-blue" onclick="runExtract()" style="margin-bottom:10px">🤖 AI: Read Check Data</button>
-      <div class="info-box">The AI will read the name &amp; address from the check to pre-fill your remit form.</div>` : ''}
-    ${aiDone ? `
-      <div class="ai-card">
-        <div class="ai-card-title">✨ AI Extracted</div>
-        <div class="ai-field"><label>Name</label><div class="val">${_extracted.name||'—'}</div></div>
-        <div class="ai-field"><label>Address</label><div class="val">${[_extracted.address,_extracted.city,_extracted.state,_extracted.zip].filter(Boolean).join(', ')||'—'}</div></div>
-        <button class="btn btn-out btn-sm" style="margin-top:6px" onclick="_extracted=null;render()">Re-extract</button>
-      </div>` : ''}
-    ${!S.anthropicKey && hasPic ? `<div class="warn-box">Add your Anthropic API key in Settings to enable AI check reading.</div>` : ''}
-    ${hasPic ? `<button class="btn btn-gold" onclick="afterFront()">Looks Good →</button>` : ''}
+    ${hasPic ? `<button class="btn btn-gold" onclick="go('n-back')">Looks Good →</button>` : ''}
   </div>`;
-}
-
-async function runExtract() {
-  if (!draft.front) return;
-  _extracted = await extractCheckData(draft.front);
-  if (_extracted) { draft.extracted = _extracted; render(); }
-  else { showToast('Could not read check — try a clearer photo'); }
-}
-
-function afterFront() {
-  if (_extracted) draft.extracted = _extracted;
-  go('n-back');
 }
 
 // ── STEP 3b: FEC LOOKUP ──
@@ -701,13 +675,15 @@ function saveFEC() {
 }
 function skipFEC() { draft.fecData = null; saveCheckDone(); }
 
-// ── STEP 2: BACK PHOTO ──
+// ── STEP 2: BACK PHOTO + AI READ ──
 function scrBack() {
   const cn = checks.length+1;
   const hasPic = !!draft.back;
-  return hdr('Back',"go('n-front')") + progBar(2,5,`Check #${cn} · Step 2 of 5 — Check Back`) + `<div class="main">
+  const aiDone  = hasPic && !!(_extracted || draft.extracted);
+  const ex = _extracted || draft.extracted || {};
+  return hdr('Back',"go('n-front')") + progBar(2,5,`Check #${cn} · Step 2 of 5 — Back of Check`) + `<div class="main">
     <h1 class="stitle">Back of Check</h1>
-    <p class="ssub">Endorse the check first, then photograph it.</p>
+    <p class="ssub">Endorse the check first, then photograph the back. Then let the AI read the check data.</p>
     <div class="info-box">📝 <strong>Sign &amp; endorse before photographing.</strong> Write "For Mobile Deposit Only" under your signature.</div>
     <input class="hf" type="file" accept="image/*" capture="environment" id="fi-back">
     <div class="photo-slot${hasPic?' filled':''}" onclick="triggerFile('fi-back')">
@@ -716,22 +692,44 @@ function scrBack() {
         : `<div class="photo-empty"><div class="ei">📷</div><div class="el">Tap to open camera</div><div class="es">Back of check (endorsed)</div></div>`}
     </div>
     ${hasPic ? `<button class="save-photo-btn" onclick="openLightbox(draft.back,'check_back.jpg')">📥 View / Save Photo</button>` : ''}
-    ${hasPic ? `<button class="btn btn-gold" onclick="go('n-confirm')">Looks Good →</button>` : ''}
+    ${hasPic && S.anthropicKey && !aiDone ? `
+      <button class="btn btn-blue" onclick="runExtract()" style="margin-bottom:10px">🤖 AI: Read Check Data</button>
+      <div class="info-box">The AI will read the name &amp; address from the check photos to pre-fill your form.</div>` : ''}
+    ${aiDone ? `
+      <div class="ai-card">
+        <div class="ai-card-title">✨ AI Read Complete</div>
+        <div class="ai-field"><label>Name</label><div class="val">${ex.name||'—'}</div></div>
+        <div class="ai-field"><label>Address</label><div class="val">${[ex.address,ex.city,ex.state,ex.zip].filter(Boolean).join(', ')||'—'}</div></div>
+        <button class="btn btn-out btn-sm" style="margin-top:6px" onclick="_extracted=null;draft.extracted=null;render()">Re-read</button>
+      </div>` : ''}
+    ${!S.anthropicKey && hasPic ? `<div class="warn-box">Add your Anthropic API key in Settings to enable AI check reading.</div>` : ''}
+    ${hasPic ? `<button class="btn btn-gold" onclick="afterBack()">Looks Good →</button>` : ''}
   </div>`;
 }
 
-// ── STEP 3: CONFIRM DONOR INFO (AI read + manual entry) ──
+async function runExtract() {
+  // Use front photo for AI reading (better data), fall back to back
+  const img = draft.front || draft.back;
+  if (!img) return;
+  _extracted = await extractCheckData(img);
+  if (_extracted) { draft.extracted = _extracted; render(); }
+  else { showToast('Could not read check — try a clearer photo'); }
+}
+
+function afterBack() {
+  if (_extracted) draft.extracted = _extracted;
+  go('n-confirm');
+}
+
+// ── STEP 3: CONFIRM DONOR INFO ──
 function scrConfirm() {
   const cn = checks.length+1;
   const ex = _extracted || draft.extracted || {};
-  const aiReady = !!draft.front && S.anthropicKey && !_extracted && !draft.extracted;
   const aiDone  = !!(_extracted || draft.extracted);
   return hdr('Back',"go('n-back')") + progBar(3,5,`Check #${cn} · Step 3 of 5 — Confirm Donor Info`) + `<div class="main">
     <h1 class="stitle">Confirm Check Info</h1>
-    <p class="ssub">Review or correct the donor's details before continuing.</p>
-    ${aiReady ? `<button class="btn btn-blue" onclick="runExtract()" style="margin-bottom:14px">🤖 AI: Read Check Now</button><div class="info-box" style="margin-bottom:14px">Tap above to have AI read the name &amp; address from the front photo automatically.</div>` : ''}
-    ${aiDone ? `<div class="ok-box" style="margin-bottom:14px">✨ <strong>AI filled in the fields below</strong> — review and correct if needed.</div>` : ''}
-    ${!S.anthropicKey ? `<div class="warn-box" style="margin-bottom:14px">Add your Anthropic API key in Settings to enable AI check reading — or fill in manually below.</div>` : ''}
+    <p class="ssub">Review and correct the fields below. The AI has pre-filled what it could read from the check.</p>
+    ${aiDone ? `<div class="ok-box" style="margin-bottom:14px">✨ <strong>AI filled in the fields below</strong> — review and correct if needed.</div>` : `<div class="info-box" style="margin-bottom:14px">Fill in the donor details below — or go back and tap the AI button on the previous screen.</div>`}
     <div class="field"><label>Donor Full Name *</label><input type="text" id="f-name" value="${draft.name||ex.name||''}" placeholder="Jane Smith" autocapitalize="words"></div>
     <div class="field"><label>Amount ($) *</label><input type="number" id="f-amt" value="${draft.amount||''}" placeholder="0.00" step="0.01" min="0" inputmode="decimal"></div>
     <div class="field"><label>Address</label><input type="text" id="f-addr" value="${ex.address||''}" placeholder="123 Main St" autocapitalize="words"></div>
