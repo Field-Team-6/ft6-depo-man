@@ -226,8 +226,8 @@ async function generateAndDownloadRemit(fields) {
     set('Text9', fields.donationAmount);
     form.flatten();
     const filledBytes = await pdfDoc.save();
-    hideLoading();
-    // Build filename: Remit-[FirstName]_[LastName]_[YYYY]_[MM]_[DD].pdf
+
+    // Build filename: Remit_[FirstName]_[LastName]_[YYYY]_[MM]_[DD].pdf
     const parts = (fields.name||'Donor').trim().split(/\s+/);
     const first = parts[0] || 'Donor';
     const last  = parts.slice(1).join('_') || 'Unknown';
@@ -235,13 +235,36 @@ async function generateAndDownloadRemit(fields) {
     const yyyy  = now.getFullYear();
     const mm    = String(now.getMonth()+1).padStart(2,'0');
     const dd    = String(now.getDate()).padStart(2,'0');
-    const fname = `Remit-${first}_${last}_${yyyy}_${mm}_${dd}.pdf`;
-    const blob  = new Blob([filledBytes], {type:'application/pdf'});
-    const url   = URL.createObjectURL(blob);
-    const a     = document.createElement('a'); a.href=url; a.download=fname; a.click();
-    setTimeout(()=>URL.revokeObjectURL(url), 5000);
-    showToast('PDF downloaded: '+fname);
-    return fname;
+    const fname = `Remit_${first}_${last}_${yyyy}_${mm}_${dd}.pdf`;
+
+    // Upload to Google Drive via backend
+    let driveUrl = null;
+    if (S.scriptUrl) {
+      try {
+        showLoading('Uploading remit to Google Drive…');
+        const b64 = btoa(String.fromCharCode(...new Uint8Array(filledBytes)));
+        const res = await fetch(S.scriptUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'uploadRemitPDF', filename: fname, pdfBase64: b64 })
+        });
+        const data = await res.json();
+        if (data.success) {
+          driveUrl = data.url;
+          showToast('Remit uploaded to Drive ✓');
+          Logger && Logger.log && Logger.log('Uploaded: ' + fname);
+        } else {
+          console.error('Drive upload failed:', data.error);
+          showToast('Drive upload failed — PDF saved locally only');
+        }
+      } catch(uploadErr) {
+        console.error('Drive upload error:', uploadErr.message);
+        showToast('Drive upload failed — PDF saved locally only');
+      }
+    }
+
+    hideLoading();
+    return { fname, driveUrl };
   } catch(e) {
     hideLoading(); console.error(e); showToast('PDF error — check console'); return null;
   }
@@ -915,10 +938,11 @@ async function doGeneratePDF() {
   if (!draft.fecData) draft.fecData = {};
   draft.fecData.employer   = emp;
   draft.fecData.occupation = occ;
-  const fname = await generateAndDownloadRemit({ name, address:addr, cityState:cs, zip, employer:emp, occupation:occ, donationAmount:amt, email, phone });
-  if (fname) {
-    draft.remitType = 'pdf-generated';
-    draft.remitFile = fname;
+  const result = await generateAndDownloadRemit({ name, address:addr, cityState:cs, zip, employer:emp, occupation:occ, donationAmount:amt, email, phone });
+  if (result) {
+    draft.remitType  = 'pdf-generated';
+    draft.remitFile  = result.fname;
+    draft.remitDriveUrl = result.driveUrl || null;
     saveCheckDone();
   }
 }
@@ -983,26 +1007,71 @@ function scrReview() {
 }
 
 // ── EMAIL ──
-function scrEmail() {
+async function scrEmail() {
   buildEmail();
+  // Show loading state immediately, then fire draft creation
+  go('email-sending');
+}
+
+function scrEmailSending() {
+  return hdr('Review',"go('review')") + `<div class="main">
+    <h1 class="stitle">Creating Draft…</h1>
+    <p class="ssub">Assembling your starred Gmail draft now.</p>
+    <div class="spin-wrap" style="justify-content:center;padding:30px 0"><div class="spin"></div>Sending to Gmail…</div>
+  </div>`;
+}
+
+async function sendDraftToGmail() {
+  if (!S.scriptUrl) {
+    showToast('Script URL not set — check Setup');
+    go('email-ready');
+    return;
+  }
+  try {
+    const url = S.scriptUrl;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action:  'createDraft',
+        subject: _emailSubject,
+        body:    _emailBody,
+        to:      S.to  || '',
+        cc:      S.cc  || ''
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      go('email-ready');
+    } else {
+      console.error('Draft creation failed:', data.error);
+      showToast('Draft creation failed — see email screen');
+      go('email-ready');
+    }
+  } catch(e) {
+    console.error('Draft error:', e.message);
+    showToast('Could not reach script — draft not created');
+    go('email-ready');
+  }
+}
+
+function scrEmailReady() {
   const subSafe  = _emailSubject.replace(/&/g,'&amp;').replace(/</g,'&lt;');
   const bodySafe = _emailBody.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>');
   return hdr('Review',"go('review')") + `<div class="main">
-    <h1 class="stitle">Email Draft Ready</h1>
-    <p class="ssub">Open Gmail below, then attach your saved photos and send.</p>
-    <button class="btn btn-gold" style="margin-bottom:22px" onclick="openGmail()">✉️ Open Gmail Draft</button>
-    <div class="sec">Subject Line</div>
-    <div class="email-box">${subSafe}</div>
-    <button class="copy-btn" onclick="copyText(_emailSubject)">📋 Copy Subject</button>
-    <div class="div"></div>
-    <div class="sec">Email Body</div>
-    <div class="email-box" style="font-size:11px">${bodySafe}</div>
-    <button class="copy-btn" onclick="copyText(_emailBody)">📋 Copy Body</button>
-    <div class="div"></div>
+    <h1 class="stitle">Draft Created ✓</h1>
+    <p class="ssub">Your starred Gmail draft is ready. Attach the check photos below and send.</p>
+    <div class="ok-box" style="margin-bottom:18px">✅ <strong>Starred draft created</strong> — open Gmail on your phone to find it in Drafts (look for the ★ star).</div>
     <div class="sec">Photos to Attach (${_emailPhotos.length})</div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Tap any photo → view full-size → save to Camera Roll → attach in Gmail.</p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Tap any photo → save to Camera Roll → attach in Gmail draft.</p>
     <div class="pgrid">${_emailPhotos.map((p,i)=>`<div class="pgrid-item" onclick="openLightbox('${p.src}','${p.file}')"><img src="${p.src}"><div class="pgrid-lbl">${p.label}</div></div>`).join('')}</div>
-    <div class="info-box" style="margin-top:14px"><strong>iPhone tip:</strong> After tapping a photo, press and hold the image → "Save to Photos." Then attach from your Camera Roll in Gmail.</div>
+    <div class="info-box" style="margin-top:14px"><strong>iPhone tip:</strong> After tapping a photo, press and hold the image → "Save to Photos." Then open Gmail, find the starred draft, and attach from your Camera Roll.</div>
+    <div class="div"></div>
+    <div class="sec">Email Preview</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Subject:</div>
+    <div class="email-box" style="margin-bottom:8px">${subSafe}</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Body:</div>
+    <div class="email-box" style="font-size:11px">${bodySafe}</div>
     <div class="div"></div>
     <button class="btn btn-green" onclick="finishBatch()">🎉 Done — Start New Batch</button>
   </div>`;
@@ -1011,27 +1080,27 @@ function scrEmail() {
 function buildEmail() {
   const sorted = [...checks].sort((a,b)=>parseFloat(b.amount)-parseFloat(a.amount));
   const total  = sorted.reduce((s,c)=>s+parseFloat(c.amount||0),0);
-  const today  = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
-  _emailSubject = sorted.map(c=>c.name).join(', ') + ' — Check Deposit' + (sorted.length>1?'s':'');
-  let body = `Hi team,\n\nPlease find the check deposit details processed on ${today}.\n\n${'━'.repeat(40)}\n\n`;
-  sorted.forEach((c,i)=>{
+  const n      = sorted.length;
+
+  // Subject: "Checks deposited from Name1, Name2, Name3"
+  _emailSubject = 'Checks deposited from ' + sorted.map(c=>c.name).join(', ');
+
+  // Body: "Hello crew, Just deposited the following X checks..."
+  let body = `Hello crew,\n\nJust deposited the following ${n} check${n!==1?'s':''} into our FIELD TEAM 6 INC account:\n\n`;
+  sorted.forEach(c=>{
     const n = slug(c.name);
-    body += `${i+1}.  ${c.name}\n`;
-    body += `    Amount:     ${fmt$(c.amount)}\n`;
-    if (c.fecData?.occupation) body += `    Occupation: ${c.fecData.occupation}\n`;
-    if (c.fecData?.employer)   body += `    Employer:   ${c.fecData.employer}\n`;
-    if (c.extracted?.address)  body += `    Address:    ${[c.extracted.address,c.extracted.city,c.extracted.state,c.extracted.zip].filter(Boolean).join(', ')}\n`;
-    if (c.remitType==='photo')        body += `    Remit:      ATTACHED — remit_${n}.jpg\n`;
-    else if (c.remitType==='actblue' ||c.remitType==='manual-ab')   body += `    Remit:      On file — ActBlue\n`;
-    else if (c.remitType==='everyaction'||c.remitType==='manual-ea') body += `    Remit:      On file — EveryAction\n`;
-    else if (c.remitType==='pdf-generated') body += `    Remit:      PDF generated — ${c.remitFile||'Remit PDF'}\n`;
-    body += '\n';
+    let line = `- ${c.name} for ${fmt$(c.amount)}`;
+    if      (c.remitType==='actblue'  || c.remitType==='manual-ab')  line += ' - remit in ActBlue';
+    else if (c.remitType==='everyaction'||c.remitType==='manual-ea') line += ' - remit in EveryAction';
+    else if (c.remitType==='photo')                                   line += ' - remit attached';
+    else if (c.remitType==='pdf-generated') {
+      if (c.remitDriveUrl) line += ` - find remit here: ${c.remitDriveUrl}`;
+      else                 line += ' - remit attached';
+    }
+    body += line + '\n';
   });
-  body += `${'━'.repeat(40)}\nTOTAL DEPOSITED: ${fmt$(total)}\n`;
-  const atts = [];
-  sorted.forEach(c=>{ const n=slug(c.name); if(c.front)atts.push(`check_front_${n}.jpg`); if(c.back)atts.push(`check_back_${n}.jpg`); if(c.remit)atts.push(`remit_${n}.jpg`); });
-  if (atts.length) { body += `\nAttachments (${atts.length}):\n`; atts.forEach(f=>{ body+=`  • ${f}\n`; }); }
-  if (S.name) body += `\nBest,\n${S.name}`;
+  body += `\nPictures of the front and back of the checks attached. Thank you!`;
+
   _emailBody = body;
   _emailPhotos = [];
   sorted.forEach(c=>{ const n=slug(c.name);
@@ -1041,10 +1110,6 @@ function buildEmail() {
   });
 }
 
-function openGmail() {
-  const url = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(S.to||'')}&su=${encodeURIComponent(_emailSubject)}&body=${encodeURIComponent(_emailBody)}${S.cc?`&cc=${encodeURIComponent(S.cc)}`:''}`;
-  window.open(url,'_blank');
-}
 function finishBatch() { if(confirm('Clear batch and start fresh?')){ checks=[]; go('home'); } }
 
 // ═══════════════════════════════════════════════════════
@@ -1082,11 +1147,16 @@ const SCREENS = {
   'n-remit-photo':'scrRemitPhoto',
   'n-fec':'scrFEC',
   'n-remit-pdf':'scrRemitPDF',
-  saved:'scrSaved', review:'scrReview', email:'scrEmail'
+  saved:'scrSaved', review:'scrReview',
+  email:'scrEmail',
+  'email-sending':'scrEmailSending',
+  'email-ready':'scrEmailReady'
 };
 function render() {
   document.getElementById('app').innerHTML = (window[SCREENS[step]] || scrHome)();
   attachListeners();
+  // Auto-fire draft creation when we land on the sending screen
+  if (step === 'email-sending') sendDraftToGmail();
 }
 render();
 </script>
