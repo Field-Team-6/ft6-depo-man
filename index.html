@@ -656,7 +656,6 @@ function scrFront() {
         ? `<img class="photo-prev" src="${draft.front}"><button class="retake-btn" onclick="event.stopPropagation();triggerFile('fi-front')">📷 Retake</button>`
         : `<div class="photo-empty"><div class="ei">📷</div><div class="el">Tap to open camera</div><div class="es">Front of check</div></div>`}
     </div>
-    ${hasPic ? `<button class="save-photo-btn" onclick="openLightbox(draft.front,'check_front.jpg')">📥 View / Save Photo</button>` : ''}
     ${hasPic ? `<button class="btn btn-gold" onclick="go('n-back')">Looks Good →</button>` : ''}
   </div>`;
 }
@@ -678,7 +677,6 @@ function scrBack() {
         ? `<img class="photo-prev" src="${draft.back}"><button class="retake-btn" onclick="event.stopPropagation();triggerFile('fi-back')">📷 Retake</button>`
         : `<div class="photo-empty"><div class="ei">📷</div><div class="el">Tap to open camera</div><div class="es">Back of check (endorsed)</div></div>`}
     </div>
-    ${hasPic ? `<button class="save-photo-btn" onclick="openLightbox(draft.back,'check_back.jpg')">📥 View / Save Photo</button>` : ''}
     ${hasPic && S.anthropicKey && !aiDone ? `
       <button class="btn btn-blue" onclick="runExtract()" style="margin-bottom:10px">🤖 AI: Read Check Data</button>
       <div class="info-box">The AI will read the name &amp; address from the check photos to pre-fill your form.</div>` : ''}
