@@ -251,7 +251,14 @@ async function generateAndDownloadRemit(fields) {
 //  PERSISTENT SETTINGS
 // ═══════════════════════════════════════════════════════
 let S = {};
-try { S = JSON.parse(localStorage.getItem('ft6_s2') || '{}'); } catch(e){}
+try {
+  const raw = localStorage.getItem('ft6_s2')
+           || localStorage.getItem('ft6_s3')
+           || localStorage.getItem('ft6_s')
+           || '{}';
+  S = JSON.parse(raw);
+  localStorage.setItem('ft6_s2', JSON.stringify(S));
+} catch(e){}
 S = Object.assign({
   name:'', to:'', cc:'',
   anthropicKey:'',
