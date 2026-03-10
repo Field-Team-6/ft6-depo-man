@@ -170,6 +170,7 @@
 
     /* ── TOAST ── */
     .toast { position:fixed; bottom:26px; left:50%; transform:translateX(-50%); background:var(--gold); color:#07091a; padding:10px 20px; border-radius:100px; font-weight:700; font-size:13px; z-index:9999; white-space:nowrap; pointer-events:none; animation:tIn .2s ease, tOut .3s ease 2.2s forwards; }
+    .err-banner { position:fixed; bottom:0; left:0; right:0; background:#c0392b; color:#fff; padding:14px 18px; font-size:14px; font-weight:600; z-index:9999; display:flex; align-items:center; justify-content:space-between; box-shadow:0 -2px 12px rgba(0,0,0,0.4); }
     @keyframes tIn  { from{opacity:0;transform:translateX(-50%) translateY(10px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
     @keyframes tOut { from{opacity:1} to{opacity:0} }
 
@@ -242,7 +243,14 @@ async function generateAndDownloadRemit(fields) {
     if (S.scriptUrl) {
       try {
         showLoading('Uploading remit to Google Drive…');
-        const b64 = btoa(String.fromCharCode(...new Uint8Array(filledBytes)));
+        // Use chunked base64 encoding to avoid crashes on large PDFs
+        const bytes = new Uint8Array(filledBytes);
+        let b64 = '';
+        const chunk = 8192;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          b64 += String.fromCharCode(...bytes.subarray(i, i + chunk));
+        }
+        b64 = btoa(b64);
         const res = await fetch(S.scriptUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -252,21 +260,25 @@ async function generateAndDownloadRemit(fields) {
         if (data.success) {
           driveUrl = data.url;
           showToast('Remit uploaded to Drive ✓');
-          Logger && Logger.log && Logger.log('Uploaded: ' + fname);
         } else {
           console.error('Drive upload failed:', data.error);
-          showToast('Drive upload failed — PDF saved locally only');
+          showError('Drive upload failed: ' + (data.error || 'unknown error') + ' — PDF not saved to Drive');
         }
       } catch(uploadErr) {
         console.error('Drive upload error:', uploadErr.message);
-        showToast('Drive upload failed — PDF saved locally only');
+        showError('Drive upload failed: ' + uploadErr.message + ' — check your Script URL in Settings');
       }
+    } else {
+      showError('No Script URL set in Settings — PDF could not be uploaded to Drive');
     }
 
     hideLoading();
     return { fname, driveUrl };
   } catch(e) {
-    hideLoading(); console.error(e); showToast('PDF error — check console'); return null;
+    hideLoading();
+    console.error(e);
+    showError('PDF generation failed: ' + e.message);
+    return null;
   }
 }
 
@@ -358,6 +370,13 @@ function showToast(m) {
   document.querySelectorAll('.toast').forEach(t=>t.remove());
   const t = document.createElement('div'); t.className='toast'; t.textContent=m;
   document.body.appendChild(t); setTimeout(()=>t.remove(), 2700);
+}
+function showError(m) {
+  document.querySelectorAll('.err-banner').forEach(b=>b.remove());
+  const b = document.createElement('div');
+  b.className = 'err-banner';
+  b.innerHTML = `<span>⚠️ ${m}</span><button onclick="this.parentElement.remove()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer;padding:0 0 0 12px;line-height:1">✕</button>`;
+  document.body.appendChild(b);
 }
 function copyText(txt) {
   navigator.clipboard?.writeText(txt).then(()=>showToast('Copied!')).catch(()=>{
@@ -1025,7 +1044,7 @@ function scrEmailSending() {
 
 async function sendDraftToGmail() {
   if (!S.scriptUrl) {
-    showToast('Script URL not set — check Setup');
+    showError('Script URL not set — go to Settings and add your Google Apps Script URL');
     go('email-ready');
     return;
   }
@@ -1047,12 +1066,12 @@ async function sendDraftToGmail() {
       go('email-ready');
     } else {
       console.error('Draft creation failed:', data.error);
-      showToast('Draft creation failed — see email screen');
+      showError('Gmail draft failed: ' + (data.error || 'unknown error'));
       go('email-ready');
     }
   } catch(e) {
     console.error('Draft error:', e.message);
-    showToast('Could not reach script — draft not created');
+    showError('Could not reach your Google Script — draft not created. Error: ' + e.message);
     go('email-ready');
   }
 }
