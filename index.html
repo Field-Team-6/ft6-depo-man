@@ -506,18 +506,28 @@ async function checkActBlue(donorName) {
 }
 
 // ═══════════════════════════════════════════════════════
-//  EVERYACTION CHECK
+//  EVERYACTION CHECK — via Zapier webhook
 // ═══════════════════════════════════════════════════════
 async function checkEveryAction(donorName) {
-  if (!S.scriptUrl) { _eaStatus='no-creds'; render(); return; }
+  if (!S.zapierUrl) { _eaStatus='no-creds'; render(); return; }
   _eaStatus = 'checking'; render();
   try {
-    const url = S.scriptUrl + '?action=checkEveryAction&donorName=' + encodeURIComponent(donorName);
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('Script returned HTTP ' + res.status);
+    // Send donor name to Zapier webhook; Zapier looks up in EveryAction and returns response
+    const res = await fetch(S.zapierUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ donorName: donorName })
+    });
+    if (!res.ok) throw new Error('Zapier webhook returned HTTP ' + res.status);
     const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    _eaStatus = data.found ? 'found' : 'notfound';
+    // Zapier return response should include { found: true/false }
+    // Also accept common EveryAction response shapes
+    const found = data.found === true
+      || (Array.isArray(data) && data.length > 0)
+      || (data.vanId !== undefined)
+      || (data.status === 'found')
+      || (typeof data.count === 'number' && data.count > 0);
+    _eaStatus = found ? 'found' : 'notfound';
   } catch(e) {
     console.error('EveryAction check failed:', e.message);
     _eaStatus = 'error';
@@ -567,7 +577,7 @@ function eaStatusHtml() {
   if (_eaStatus==='checking')  return `<div class="spin-wrap"><div class="spin"></div>Checking EveryAction…</div>`;
   if (_eaStatus==='found')     return `<div class="ok-box">✅ <strong>Found in EveryAction</strong> — remit on file.</div>`;
   if (_eaStatus==='notfound')  return `<div class="warn-box">⚠️ Not found in EveryAction.</div>`;
-  if (_eaStatus==='no-creds')  return `<div class="warn-box">⚠️ <strong>Script URL not set.</strong> Go to ⚙ Setup and paste in your Google Apps Script URL, then try again.</div>`;
+  if (_eaStatus==='no-creds')  return `<div class="warn-box">⚠️ <strong>Zapier webhook not set.</strong> Go to ⚙ Setup and paste in your Zapier EveryAction Webhook URL, then try again.</div>`;
   if (_eaStatus==='error')     return `<div class="warn-box">⚠️ <strong>EveryAction lookup failed.</strong> Check your Script URL in ⚙ Setup, then use the buttons below to confirm manually.<br><small style="opacity:.6">${_eaError}</small></div>`;
   return '';
 }
@@ -629,8 +639,10 @@ function scrSettings() {
     <div class="info-box">Your Anthropic API key lets the app read check photos automatically and will fill in remit forms. Get one free at <strong>console.anthropic.com</strong> → "API Keys". It costs pennies per check.</div>
     <div class="field"><label>Anthropic API Key</label><input type="password" id="s-akey" value="${S.anthropicKey||''}" placeholder="sk-ant-…"></div>
     <div class="sec">ActBlue &amp; EveryAction</div>
-    <div class="info-box">Paste your Google Apps Script URL here. The script handles all ActBlue and EveryAction lookups securely — your credentials are already baked into the script.</div>
+    <div class="info-box">Paste your Google Apps Script URL here. The script handles ActBlue lookups, Gmail drafts, and PDF uploads securely — your credentials are already baked in.</div>
     <div class="field"><label>Apps Script URL</label><input type="text" id="s-script" value="${S.scriptUrl||''}" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="none" autocorrect="off" spellcheck="false"></div>
+    <div class="info-box" style="margin-top:10px">To look up donors in <strong>EveryAction</strong>, paste your Zapier Catch Hook URL below. Set up a Zap: <em>Webhooks by Zapier (Catch Hook)</em> → <em>EveryAction: Find Person</em> → <em>Webhooks by Zapier (Return Response)</em>.</div>
+    <div class="field"><label>Zapier EveryAction Webhook URL</label><input type="text" id="s-zapier" value="${S.zapierUrl||''}" placeholder="https://hooks.zapier.com/hooks/catch/…" autocapitalize="none" autocorrect="off" spellcheck="false"></div>
     <div class="sec">Options</div>
     <div class="field"><div class="toggle-row"><div><div class="toggle-label">Auto-search FEC.gov</div><div class="toggle-sub">Looks up occupation &amp; employer automatically</div></div><input type="checkbox" id="s-autofec" ${S.autoFEC!==false?'checked':''}></div></div>
     <button class="btn btn-gold" onclick="saveAndGoHome()">Save &amp; Return Home</button>
@@ -643,6 +655,7 @@ function saveAndGoHome() {
   S.cc           = document.getElementById('s-cc')?.value?.trim()||'';
   S.anthropicKey = document.getElementById('s-akey')?.value?.trim()||'';
   S.scriptUrl    = document.getElementById('s-script')?.value?.trim()||'';
+  S.zapierUrl    = document.getElementById('s-zapier')?.value?.trim()||'';
   S.abUser       = '';
   S.abPass       = '';
   S.eaKey        = '';
@@ -726,7 +739,7 @@ function scrConfirm() {
     <p class="ssub">Review and correct the fields below. The AI has pre-filled what it could read from the check.</p>
     ${aiDone ? `<div class="ok-box" style="margin-bottom:14px">✨ <strong>AI filled in the fields below</strong> — review and correct if needed.</div>` : `<div class="info-box" style="margin-bottom:14px">Fill in the donor details below — or go back and tap the AI button on the previous screen.</div>`}
     <div class="field"><label>Donor Full Name *</label><input type="text" id="f-name" value="${draft.name||ex.name||''}" placeholder="Jane Smith" autocapitalize="words"></div>
-    <div class="field"><label>Amount ($) *</label><input type="text" id="f-amt" value="${draft.amount||ex.amount||''}" placeholder="0.00" inputmode="decimal"></div>
+    <div class="field"><label>Amount ($) *</label><input type="text" id="f-amt" value="${draft.amount ? parseFloat(draft.amount).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : ex.amount ? parseFloat(String(ex.amount).replace(/[$,]/g,'')).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : ''}" placeholder="0.00" inputmode="decimal"></div>
     <div class="field"><label>Address</label><input type="text" id="f-addr" value="${ex.address||''}" placeholder="123 Main St" autocapitalize="words"></div>
     <div class="row2">
       <div class="field"><label>City</label><input type="text" id="f-city" value="${ex.city||''}" placeholder="Springfield" autocapitalize="words"></div>
