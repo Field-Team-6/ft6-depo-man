@@ -312,7 +312,7 @@ function startCheck() {
   };
   _extracted = null; _fecResults = []; _fecSelected = null;
   _abStatus = null; _eaStatus = null; _fecQuery = '';
-  go('n-name');
+  go('n-front');
 }
 
 function delCheck(id) { checks = checks.filter(c=>c.id!==id); render(); }
@@ -571,7 +571,7 @@ function scrHome() {
     ` : `<div class="stack"><button class="btn btn-gold" onclick="startCheck()">📸 Start Processing Checks</button></div>
       <div class="info-box" style="margin-top:18px">
         <strong>What happens for each check:</strong><br>
-        Name → Amount → Front photo → AI reads check → FEC lookup → Back photo → Remit (auto-check ActBlue/EveryAction, or photograph) → Done. Then the app drafts your email automatically.
+        Front photo → Back photo → AI reads check → Remit (auto-check ActBlue/EveryAction, or photograph) → FEC lookup → Done. Then the app drafts your email automatically.
       </div>`}
   </div>`;
 }
@@ -613,55 +613,23 @@ function saveAndGoHome() {
 }
 function clearBatch() { if(confirm('Clear all checks?')){ checks=[]; go('home'); } }
 
-// ── STEP 1: NAME ──
-function scrName() {
-  const cn = checks.length+1;
-  return hdr('Home',"go('home')") + progBar(1,6,`Check #${cn} · Step 1 of 6 — Donor Name`) + `<div class="main">
-    <h1 class="stitle">Who sent this check?</h1>
-    <p class="ssub">Enter the donor's full name exactly as it appears on the check.</p>
-    <div class="field"><label>Donor Full Name</label><input type="text" id="f-name" value="${draft.name||''}" placeholder="Jane Smith" autocapitalize="words"></div>
-    <button class="btn btn-gold" onclick="saveName()">Continue →</button>
-  </div>`;
-}
-function saveName() {
-  const v = document.getElementById('f-name')?.value?.trim();
-  if (!v) { showToast('Please enter a name'); return; }
-  draft.name = v; go('n-amount');
-}
-
-// ── STEP 2: AMOUNT ──
-function scrAmount() {
-  const cn = checks.length+1;
-  return hdr('Back',"go('n-name')") + progBar(2,6,`Check #${cn} · Step 2 of 6 — Amount`) + `<div class="main">
-    <h1 class="stitle">How much is the check?</h1>
-    <p class="ssub">Enter the dollar amount on ${draft.name}'s check.</p>
-    <div class="field"><label>Amount ($)</label><input type="number" id="f-amt" value="${draft.amount||''}" placeholder="0.00" step="0.01" min="0" inputmode="decimal"></div>
-    <button class="btn btn-gold" onclick="saveAmount()">Continue →</button>
-  </div>`;
-}
-function saveAmount() {
-  const v = document.getElementById('f-amt')?.value;
-  if (!v||parseFloat(v)<=0) { showToast('Please enter a valid amount'); return; }
-  draft.amount = v; go('n-front');
-}
-
-// ── STEP 3: FRONT PHOTO + AI EXTRACTION ──
+// ── STEP 1: FRONT PHOTO + AI EXTRACTION ──
 function scrFront() {
   const cn = checks.length+1;
   const hasPic = !!draft.front;
   const aiReady = hasPic && !_extracted && S.anthropicKey;
   const aiDone  = hasPic && !!_extracted;
 
-  return hdr('Back',"go('n-amount')") + progBar(3,6,`Check #${cn} · Step 3 of 6 — Check Front + AI Read`) + `<div class="main">
+  return hdr('Home',"go('home')") + progBar(1,5,`Check #${cn} · Step 1 of 5 — Front of Check`) + `<div class="main">
     <h1 class="stitle">Front of Check</h1>
-    <p class="ssub">Take a clear, well-lit photo of the front of ${draft.name}'s check.</p>
+    <p class="ssub">Take a clear, well-lit photo of the front of the check.</p>
     <input class="hf" type="file" accept="image/*" capture="environment" id="fi-front">
     <div class="photo-slot${hasPic?' filled':''}" onclick="triggerFile('fi-front')">
       ${hasPic
         ? `<img class="photo-prev" src="${draft.front}"><button class="retake-btn" onclick="event.stopPropagation();triggerFile('fi-front')">📷 Retake</button>`
         : `<div class="photo-empty"><div class="ei">📷</div><div class="el">Tap to open camera</div><div class="es">Front of check</div></div>`}
     </div>
-    ${hasPic ? `<button class="save-photo-btn" onclick="openLightbox(draft.front,'check_front_${slug(draft.name)}.jpg')">📥 View / Save Photo</button>` : ''}
+    ${hasPic ? `<button class="save-photo-btn" onclick="openLightbox(draft.front,'check_front.jpg')">📥 View / Save Photo</button>` : ''}
     ${hasPic && S.anthropicKey && !aiDone ? `
       <button class="btn btn-blue" onclick="runExtract()" style="margin-bottom:10px">🤖 AI: Read Check Data</button>
       <div class="info-box">The AI will read the name &amp; address from the check to pre-fill your remit form.</div>` : ''}
@@ -686,16 +654,14 @@ async function runExtract() {
 
 function afterFront() {
   if (_extracted) draft.extracted = _extracted;
-  // Kick off FEC search in background
-  if (S.autoFEC!==false && draft.name) { searchFEC(draft.name); }
-  go('n-fec');
+  go('n-back');
 }
 
 // ── STEP 3b: FEC LOOKUP ──
 function scrFEC() {
   const cn = checks.length+1;
   const q  = _fecQuery || draft.name;
-  return hdr('Back',"go('n-front')") + progBar(3,6,`Check #${cn} · Step 3b — FEC Lookup`) + `<div class="main">
+  return hdr('Back',"go('n-remit')") + progBar(5,5,`Check #${cn} · Step 5 of 5 — FEC Lookup`) + `<div class="main">
     <h1 class="stitle">FEC.gov Lookup</h1>
     <p class="ssub">Search for ${draft.name}'s occupation &amp; employer in FEC donation records.</p>
     <div class="field" style="display:flex;gap:8px;align-items:flex-end">
@@ -731,15 +697,15 @@ function saveFEC() {
   const occ = document.getElementById('fec-occ')?.value?.trim()||'';
   const emp = document.getElementById('fec-emp')?.value?.trim()||'';
   draft.fecData = { occupation:occ, employer:emp };
-  go('n-back');
+  saveCheckDone();
 }
-function skipFEC() { draft.fecData = null; go('n-back'); }
+function skipFEC() { draft.fecData = null; saveCheckDone(); }
 
-// ── STEP 4: BACK PHOTO ──
+// ── STEP 2: BACK PHOTO ──
 function scrBack() {
   const cn = checks.length+1;
   const hasPic = !!draft.back;
-  return hdr('Back',"go('n-fec')") + progBar(4,6,`Check #${cn} · Step 4 of 6 — Check Back`) + `<div class="main">
+  return hdr('Back',"go('n-front')") + progBar(2,5,`Check #${cn} · Step 2 of 5 — Check Back`) + `<div class="main">
     <h1 class="stitle">Back of Check</h1>
     <p class="ssub">Endorse the check first, then photograph it.</p>
     <div class="info-box">📝 <strong>Sign &amp; endorse before photographing.</strong> Write "For Mobile Deposit Only" under your signature.</div>
@@ -749,12 +715,57 @@ function scrBack() {
         ? `<img class="photo-prev" src="${draft.back}"><button class="retake-btn" onclick="event.stopPropagation();triggerFile('fi-back')">📷 Retake</button>`
         : `<div class="photo-empty"><div class="ei">📷</div><div class="el">Tap to open camera</div><div class="es">Back of check (endorsed)</div></div>`}
     </div>
-    ${hasPic ? `<button class="save-photo-btn" onclick="openLightbox(draft.back,'check_back_${slug(draft.name)}.jpg')">📥 View / Save Photo</button>` : ''}
-    ${hasPic ? `<button class="btn btn-gold" onclick="go('n-remit')">Looks Good →</button>` : ''}
+    ${hasPic ? `<button class="save-photo-btn" onclick="openLightbox(draft.back,'check_back.jpg')">📥 View / Save Photo</button>` : ''}
+    ${hasPic ? `<button class="btn btn-gold" onclick="go('n-confirm')">Looks Good →</button>` : ''}
   </div>`;
 }
 
-// ── STEP 5: REMIT ──
+// ── STEP 3: CONFIRM DONOR INFO (AI read + manual entry) ──
+function scrConfirm() {
+  const cn = checks.length+1;
+  const ex = _extracted || draft.extracted || {};
+  const aiReady = !!draft.front && S.anthropicKey && !_extracted && !draft.extracted;
+  const aiDone  = !!(_extracted || draft.extracted);
+  return hdr('Back',"go('n-back')") + progBar(3,5,`Check #${cn} · Step 3 of 5 — Confirm Donor Info`) + `<div class="main">
+    <h1 class="stitle">Confirm Check Info</h1>
+    <p class="ssub">Review or correct the donor's details before continuing.</p>
+    ${aiReady ? `<button class="btn btn-blue" onclick="runExtract()" style="margin-bottom:14px">🤖 AI: Read Check Now</button><div class="info-box" style="margin-bottom:14px">Tap above to have AI read the name &amp; address from the front photo automatically.</div>` : ''}
+    ${aiDone ? `<div class="ok-box" style="margin-bottom:14px">✨ <strong>AI filled in the fields below</strong> — review and correct if needed.</div>` : ''}
+    ${!S.anthropicKey ? `<div class="warn-box" style="margin-bottom:14px">Add your Anthropic API key in Settings to enable AI check reading — or fill in manually below.</div>` : ''}
+    <div class="field"><label>Donor Full Name *</label><input type="text" id="f-name" value="${draft.name||ex.name||''}" placeholder="Jane Smith" autocapitalize="words"></div>
+    <div class="field"><label>Amount ($) *</label><input type="number" id="f-amt" value="${draft.amount||''}" placeholder="0.00" step="0.01" min="0" inputmode="decimal"></div>
+    <div class="field"><label>Address</label><input type="text" id="f-addr" value="${ex.address||''}" placeholder="123 Main St" autocapitalize="words"></div>
+    <div class="row2">
+      <div class="field"><label>City</label><input type="text" id="f-city" value="${ex.city||''}" placeholder="Springfield" autocapitalize="words"></div>
+      <div class="field"><label>State</label><input type="text" id="f-state" value="${ex.state||''}" placeholder="IL" autocapitalize="characters" maxlength="2"></div>
+    </div>
+    <div class="field"><label>Zip</label><input type="text" id="f-zip" value="${ex.zip||''}" placeholder="62701" inputmode="numeric"></div>
+    <button class="btn btn-gold" onclick="saveConfirm()">Looks Good →</button>
+  </div>`;
+}
+function saveConfirm() {
+  const name = document.getElementById('f-name')?.value?.trim();
+  const amt  = document.getElementById('f-amt')?.value;
+  if (!name) { showToast('Please enter the donor name'); return; }
+  if (!amt || parseFloat(amt) <= 0) { showToast('Please enter a valid amount'); return; }
+  draft.name   = name;
+  draft.amount = amt;
+  const addr  = document.getElementById('f-addr')?.value?.trim()||'';
+  const city  = document.getElementById('f-city')?.value?.trim()||'';
+  const state = document.getElementById('f-state')?.value?.trim()||'';
+  const zip   = document.getElementById('f-zip')?.value?.trim()||'';
+  if (!draft.extracted) draft.extracted = {};
+  draft.extracted.name    = name;
+  draft.extracted.address = addr;
+  draft.extracted.city    = city;
+  draft.extracted.state   = state;
+  draft.extracted.zip     = zip;
+  // Kick off FEC search in background for use later
+  if (S.autoFEC!==false && name) { searchFEC(name); }
+  go('n-remit');
+}
+
+// ── STEP 4: REMIT ──
 function scrRemit() {
   const cn = checks.length+1;
   const hasCreds = !!S.scriptUrl;
@@ -763,9 +774,9 @@ function scrRemit() {
     checkActBlue(draft.name);
     checkEveryAction(draft.name);
   }
-  return hdr('Back',"go('n-back')") + progBar(5,6,`Check #${cn} · Step 5 of 6 — Remit`) + `<div class="main">
+  return hdr('Back',"go('n-confirm')") + progBar(4,5,`Check #${cn} · Step 4 of 5 — Remit`) + `<div class="main">
     <h1 class="stitle">Remit for ${draft.name}</h1>
-    <p class="ssub">Check whether we have their FEC remit on file, or photograph the physical one.</p>
+    <p class="ssub">Check whether we have ${draft.name}'s FEC remit on file, or photograph the physical one.</p>
     ${hasCreds?`<div class="sec">Auto-Check Results</div>${abStatusHtml()}${eaStatusHtml()}`:''}
     ${(_abStatus==='found') ? `
       <button class="btn btn-blue" onclick="pickRemit('manual-ab')">✅ Confirm — ActBlue on file</button><div style="height:10px"></div>` : ''}
@@ -780,13 +791,13 @@ function scrRemit() {
   </div>`;
 }
 
-function pickRemit(type) { draft.remitType = type; draft.remit = null; saveCheckDone(); }
+function pickRemit(type) { draft.remitType = type; draft.remit = null; go('n-fec'); }
 
 // ── STEP 5b: REMIT PHOTO ──
 function scrRemitPhoto() {
   const cn = checks.length+1;
   const hasPic = !!draft.remit;
-  return hdr('Back',"go('n-remit')") + progBar(5,6,`Check #${cn} · Step 5 of 6 — Remit Photo`) + `<div class="main">
+  return hdr('Back',"go('n-remit')") + progBar(4,5,`Check #${cn} · Step 4 of 5 — Remit Photo`) + `<div class="main">
     <h1 class="stitle">Photo: Remit Document</h1>
     <p class="ssub">Take a clear photo of the FEC remit form for ${draft.name}.</p>
     <input class="hf" type="file" accept="image/*" id="fi-remit">
@@ -799,7 +810,7 @@ function scrRemitPhoto() {
     ${hasPic ? `<button class="btn btn-gold" onclick="finishRemitPhoto()">Save This Check →</button>` : ''}
   </div>`;
 }
-function finishRemitPhoto() { draft.remitType='photo'; saveCheckDone(); }
+function finishRemitPhoto() { draft.remitType='photo'; go('n-fec'); }
 
 
 // ── STEP 5c: GENERATE PDF REMIT ──
@@ -808,7 +819,7 @@ function scrRemitPDF() {
   const ex = draft.extracted || {};
   const fd = draft.fecData   || {};
   const cityState = [ex.city, ex.state].filter(Boolean).join(', ');
-  return hdr('Back',"go('n-remit')") + progBar(5,6,`Check #${cn} · Step 5 of 6 — Generate PDF Remit`) + `<div class="main">
+  return hdr('Back',"go('n-remit')") + progBar(4,5,`Check #${cn} · Step 4 of 5 — Generate PDF Remit`) + `<div class="main">
     <h1 class="stitle">PDF Remit for ${draft.name}</h1>
     <p class="ssub">Review and fill in the fields below. The app will generate a filled PDF remit form for you to download.</p>
     <div class="ok-box">✅ <strong>Mandatory fields</strong> are marked with *. Optional fields can be left blank.</div>
@@ -853,7 +864,7 @@ async function doGeneratePDF() {
   if (fname) {
     draft.remitType = 'pdf-generated';
     draft.remitFile = fname;
-    saveCheckDone();
+    go('n-fec');
   }
 }
 
@@ -1010,9 +1021,10 @@ function attachListeners() {
 // ═══════════════════════════════════════════════════════
 const SCREENS = {
   home:'scrHome', settings:'scrSettings',
-  'n-name':'scrName', 'n-amount':'scrAmount',
-  'n-front':'scrFront', 'n-fec':'scrFEC',
-  'n-back':'scrBack', 'n-remit':'scrRemit',
+  'n-front':'scrFront', 'n-back':'scrBack',
+  'n-confirm':'scrConfirm',
+  'n-fec':'scrFEC',
+  'n-remit':'scrRemit',
   'n-remit-photo':'scrRemitPhoto',
   'n-remit-pdf':'scrRemitPDF',
   saved:'scrSaved', review:'scrReview', email:'scrEmail'
