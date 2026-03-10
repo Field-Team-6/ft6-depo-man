@@ -666,8 +666,7 @@ function scrRemitQ(){
 }
 function checkRemitOnFile(){
   draft._abStatus=null; draft._eaStatus=null;
-  if(S.abUser&&S.abPass) checkActBlue(draft.name);
-  if(S.eaKey&&S.eaApp) checkEveryAction(draft.name);
+  if(S.scriptUrl){ checkActBlue(draft.name); checkEveryAction(draft.name); }
   go("s-remit-check");
 }
 
@@ -692,8 +691,8 @@ function scrRemitCheck(){
   const cn=checks.length+1;
   const ab=draft._abStatus; const ea=draft._eaStatus;
   const noCreds=!S.abUser&&!S.abPass&&!S.eaKey&&!S.eaApp;
-  const abHtml = !S.abUser&&!S.abPass?`<div class="info-box">ℹ️ ActBlue credentials not set up — <button class="ibtn" onclick="go(\'settings\')">Add in Settings</button></div>`:ab==="checking"?`<div class="spin-wrap"><div class="spin"></div>Checking ActBlue…</div>`:ab==="found"?`<div class="ok-box">✅ <strong>Found in ActBlue</strong> — remit on file.</div>`:ab==="notfound"?`<div class="warn-box">⚠️ Not found in ActBlue.</div>`:`<div class="warn-box">⚠️ ActBlue auto-check unavailable — browser security prevents direct API calls. Please check ActBlue manually, then use the buttons below.</div>`;
-  const eaHtml = !S.eaKey&&!S.eaApp?`<div class="info-box">ℹ️ EveryAction credentials not set up — <button class="ibtn" onclick="go(\'settings\')">Add in Settings</button></div>`:ea==="checking"?`<div class="spin-wrap"><div class="spin"></div>Checking EveryAction…</div>`:ea==="found"?`<div class="ok-box">✅ <strong>Found in EveryAction</strong> — remit on file.</div>`:ea==="notfound"?`<div class="warn-box">⚠️ Not found in EveryAction.</div>`:`<div class="warn-box">⚠️ EveryAction auto-check unavailable — browser security prevents direct API calls. Please check EveryAction manually, then use the buttons below.</div>`;
+    const abHtml = !S.scriptUrl?`<div class="info-box">ℹ️ Script URL not set — go to ⚙ Setup first.</div>`:ab==="checking"?`<div class="spin-wrap"><div class="spin"></div>Searching ActBlue records… (10–30 sec)</div>`:ab==="found"?`<div class="ok-box">✅ <strong>Found in ActBlue</strong> — remit on file.</div>`:ab==="notfound"?`<div class="warn-box">⚠️ Not found in ActBlue.</div>`:ab==="cors-error"?`<div class="warn-box">⚠️ Could not reach ActBlue. Confirm manually below.</div>`:`<div class="spin-wrap"><div class="spin"></div>Waiting for ActBlue…</div>`
+    const eaHtml = !S.scriptUrl?`<div class="info-box">ℹ️ Script URL not set — go to ⚙ Setup first.</div>`:ea==="checking"?`<div class="spin-wrap"><div class="spin"></div>Checking EveryAction…</div>`:ea==="found"?`<div class="ok-box">✅ <strong>Found in EveryAction</strong> — remit on file.</div>`:ea==="notfound"?`<div class="warn-box">⚠️ Not found in EveryAction.</div>`:ea==="cors-error"?`<div class="warn-box">⚠️ Could not reach EveryAction. Confirm manually below.</div>`:`<div class="spin-wrap"><div class="spin"></div>Waiting for EveryAction…</div>`
   return hdrBar("Back","go(\'s-remit-q\')")+progBar(5,7,`Check #${cn} · Step 5 of 7 — Check Records`)+`<div class="main">
   <h1 class="stitle">Checking for Remit On File</h1>
   <p class="ssub">Searching ActBlue and EveryAction for ${draft.name}\'s remit…</p>
