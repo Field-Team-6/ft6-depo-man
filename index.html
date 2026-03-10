@@ -347,8 +347,11 @@ function delCheck(id) { checks = checks.filter(c=>c.id!==id); render(); }
 // ═══════════════════════════════════════════════════════
 function fmt$(v) {
   const n = parseFloat(String(v).replace(/[^0-9.]/g,''));
-  if (isNaN(n)) return '$0.00';
-  return '$' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+  if (isNaN(n)) return '$0';
+  const formatted = n % 1 === 0
+    ? n.toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:0})
+    : n.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+  return '$' + formatted;
 }
 function slug(n) { return (n||'donor').trim().replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,''); }
 function showToast(m) {
@@ -716,7 +719,7 @@ function scrConfirm() {
     <p class="ssub">Review and correct the fields below. The AI has pre-filled what it could read from the check.</p>
     ${aiDone ? `<div class="ok-box" style="margin-bottom:14px">✨ <strong>AI filled in the fields below</strong> — review and correct if needed.</div>` : `<div class="info-box" style="margin-bottom:14px">Fill in the donor details below — or go back and tap the AI button on the previous screen.</div>`}
     <div class="field"><label>Donor Full Name *</label><input type="text" id="f-name" value="${draft.name||ex.name||''}" placeholder="Jane Smith" autocapitalize="words"></div>
-    <div class="field"><label>Amount ($) *</label><input type="number" id="f-amt" value="${draft.amount||ex.amount||''}" placeholder="0.00" step="0.01" min="0" inputmode="decimal"></div>
+    <div class="field"><label>Amount ($) *</label><input type="text" id="f-amt" value="${draft.amount||ex.amount||''}" placeholder="0.00" inputmode="decimal"></div>
     <div class="field"><label>Address</label><input type="text" id="f-addr" value="${ex.address||''}" placeholder="123 Main St" autocapitalize="words"></div>
     <div class="row2">
       <div class="field"><label>City</label><input type="text" id="f-city" value="${ex.city||''}" placeholder="Springfield" autocapitalize="words"></div>
@@ -728,9 +731,10 @@ function scrConfirm() {
 }
 function saveConfirm() {
   const name = document.getElementById('f-name')?.value?.trim();
-  const amt  = document.getElementById('f-amt')?.value;
+  const amtRaw = document.getElementById('f-amt')?.value;
+  const amt  = parseFloat(String(amtRaw||'').replace(/[$,]/g,''));
   if (!name) { showToast('Please enter the donor name'); return; }
-  if (!amt || parseFloat(amt) <= 0) { showToast('Please enter a valid amount'); return; }
+  if (!amtRaw || isNaN(amt) || amt <= 0) { showToast('Please enter a valid amount'); return; }
   draft.name   = name;
   draft.amount = amt;
   const addr  = document.getElementById('f-addr')?.value?.trim()||'';
@@ -1082,8 +1086,8 @@ function buildEmail() {
   const total  = sorted.reduce((s,c)=>s+parseFloat(c.amount||0),0);
   const n      = sorted.length;
 
-  // Subject: "Checks deposited from Name1, Name2, Name3"
-  _emailSubject = 'Checks deposited from ' + sorted.map(c=>c.name).join(', ');
+  // Subject: singular vs plural
+  _emailSubject = (n === 1 ? 'Check' : 'Checks') + ' deposited from ' + sorted.map(c=>c.name).join(', ');
 
   // Body: "Hello crew, Just deposited the following X checks..."
   let body = `Hello crew,\n\nJust deposited the following ${n} check${n!==1?'s':''} into our FIELD TEAM 6 INC account:\n\n`;
@@ -1099,7 +1103,7 @@ function buildEmail() {
     }
     body += line + '\n';
   });
-  body += `\nPictures of the front and back of the checks attached. Thank you!`;
+  body += `\nPictures of the front and back of the check${n!==1?'s':''} attached. Thank you!`;
 
   _emailBody = body;
   _emailPhotos = [];
