@@ -224,7 +224,7 @@ async function generateAndDownloadRemit(fields) {
     set('Text6', fields.zip);
     set('Text7', fields.employer);
     set('Text8', fields.occupation);
-    set('Text9', fields.donationAmount);
+    set('Text9', String(fields.donationAmount).replace(/[$,]/g,''));
     form.flatten();
     const filledBytes = await pdfDoc.save();
 
@@ -641,6 +641,7 @@ function scrSettings() {
     <div class="sec">ActBlue &amp; EveryAction</div>
     <div class="info-box">Paste your Google Apps Script URL here. The script handles all ActBlue and EveryAction lookups securely — your credentials are already baked into the script.</div>
     <div class="field"><label>Apps Script URL</label><input type="text" id="s-script" value="${S.scriptUrl||''}" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="none" autocorrect="off" spellcheck="false"></div>
+    <button class="btn btn-out btn-sm" style="margin-bottom:16px" onclick="testScriptConnection()">🔌 Test Connection</button>
     <div class="sec">Options</div>
     <div class="field"><div class="toggle-row"><div><div class="toggle-label">Auto-search FEC.gov</div><div class="toggle-sub">Looks up occupation &amp; employer automatically</div></div><input type="checkbox" id="s-autofec" ${S.autoFEC!==false?'checked':''}></div></div>
     <button class="btn btn-gold" onclick="saveAndGoHome()">Save &amp; Return Home</button>
@@ -661,6 +662,23 @@ function saveAndGoHome() {
   saveS(); showToast('Saved ✓'); go('home');
 }
 function clearBatch() { if(confirm('Clear all checks?')){ checks=[]; go('home'); } }
+
+async function testScriptConnection() {
+  const url = document.getElementById('s-script')?.value?.trim() || S.scriptUrl;
+  if (!url) { showError('No Script URL entered — paste it in the field above first'); return; }
+  showToast('Testing connection…');
+  try {
+    const res = await fetch(url, { method: 'GET' });
+    const data = await res.json();
+    if (data.status || data.success || res.ok) {
+      showToast('✅ Connection successful!');
+    } else {
+      showError('Script responded but returned an error: ' + JSON.stringify(data));
+    }
+  } catch(e) {
+    showError('❌ Connection failed: ' + e.message + ' — your Script URL may be wrong or the script needs to be redeployed');
+  }
+}
 
 // ── STEP 1: FRONT PHOTO ──
 function scrFront() {
@@ -929,7 +947,7 @@ function scrRemitPDF() {
     <div class="field"><label>Zip *</label><input type="text" id="rf-zip" value="${ex.zip||''}" placeholder="62701" inputmode="numeric"></div>
     <div class="field"><label>Employer *</label><input type="text" id="rf-emp" value="${fd.employer||''}" placeholder="Employer name (or Self / Not Employed)" autocapitalize="words"></div>
     <div class="field"><label>Occupation *</label><input type="text" id="rf-occ" value="${fd.occupation||''}" placeholder="e.g. Teacher, Engineer, Retired" autocapitalize="words"></div>
-    <div class="field"><label>Donation Amount *</label><input type="text" id="rf-amt" value="${draft.amount?'$'+parseFloat(draft.amount).toFixed(2):''}" placeholder="$0.00" inputmode="decimal"></div>
+    <div class="field"><label>Donation Amount *</label><input type="text" id="rf-amt" value="${draft.amount?fmt$(draft.amount):''}" placeholder="$0.00" inputmode="decimal"></div>
     <div class="field"><label>Email (optional)</label><input type="email" id="rf-email" value="" placeholder="donor@email.com" autocapitalize="none"></div>
     <div class="field"><label>Phone (optional)</label><input type="text" id="rf-phone" value="" placeholder="555-555-5555" inputmode="tel"></div>
     <div class="stack">
