@@ -641,14 +641,128 @@ function scrSettings() {
     <div class="sec">ActBlue &amp; EveryAction</div>
     <div class="info-box">Paste your Google Apps Script URL here. The script handles ActBlue lookups, Gmail drafts, and PDF uploads securely — your credentials are already baked in.</div>
     <div class="field"><label>Apps Script URL</label><input type="text" id="s-script" value="${S.scriptUrl||''}" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="none" autocorrect="off" spellcheck="false"></div>
-    <div class="info-box" style="margin-top:10px">To look up donors in <strong>EveryAction</strong>, paste your Zapier Catch Hook URL below. Set up a Zap: <em>Webhooks by Zapier (Catch Hook)</em> → <em>EveryAction: Find Person</em> → <em>Webhooks by Zapier (Return Response)</em>.</div>
-    <div class="field"><label>Zapier EveryAction Webhook URL</label><input type="text" id="s-zapier" value="${S.zapierUrl||''}" placeholder="https://hooks.zapier.com/hooks/catch/…" autocapitalize="none" autocorrect="off" spellcheck="false"></div>
+    <div class="info-box" style="margin-top:10px">🧪 <strong>EveryAction bulk export:</strong> Tap the button below to test whether your EveryAction API key supports bulk contact downloads (the free approach). This will tell us instantly if it's possible.</div>
+    <button class="btn btn-out" style="margin-bottom:6px" onclick="testEAExportAccess()" id="ea-test-btn">🔍 Test EveryAction Export Access</button>
+    <div id="ea-test-result"></div>
     <div class="sec">Options</div>
     <div class="field"><div class="toggle-row"><div><div class="toggle-label">Auto-search FEC.gov</div><div class="toggle-sub">Looks up occupation &amp; employer automatically</div></div><input type="checkbox" id="s-autofec" ${S.autoFEC!==false?'checked':''}></div></div>
     <button class="btn btn-gold" onclick="saveAndGoHome()">Save &amp; Return Home</button>
     ${checks.length>0?`<div class="div"></div><button class="btn btn-red" onclick="clearBatch()">🗑 Clear Entire Batch</button>`:''}
   </div>`;
 }
+// ═══════════════════════════════════════════════════════
+//  TEST EVERYACTION BULK EXPORT ACCESS
+// ═══════════════════════════════════════════════════════
+async function testEAExportAccess() {
+  const btn = document.getElementById('ea-test-btn');
+  const resultDiv = document.getElementById('ea-test-result');
+  if (!btn || !resultDiv) return;
+
+  const EA_API_KEY  = '819c87d3-b132-8acd-51dd-11d01908fffe';
+  const EA_APP_NAME = 'EA005.000008.181';
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Testing…';
+  resultDiv.innerHTML = '<div class="spin-wrap"><div class="spin"></div>Contacting EveryAction API…</div>';
+
+  try {
+    // Step 1: Try to hit the changedEntityExportJobs endpoint
+    // We POST a minimal job request — if we get back a job ID, bulk export is allowed.
+    // If we get 403 Forbidden, the key doesn't have permission.
+    const credentials = btoa(EA_APP_NAME + '|1:' + EA_API_KEY);
+    const res = await fetch('https://api.securevan.com/v4/changedEntityExportJobs', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Basic ' + credentials,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        dateChangedFrom: new Date(Date.now() - 7*24*60*60*1000).toISOString(), // last 7 days
+        dateChangedTo:   new Date().toISOString(),
+        resourceType:    'Contacts',
+        fields:          ['FirstName','LastName']
+      })
+    });
+
+    const code = res.status;
+    let body = '';
+    try { body = await res.text(); } catch(e) {}
+
+    if (code === 200 || code === 201 || code === 202) {
+      // Success — bulk export is supported!
+      resultDiv.innerHTML = `<div class="ok-box">
+        ✅ <strong>Great news — bulk export works!</strong><br>
+        EveryAction returned HTTP ${code}, which means your API key has permission to download bulk contact lists.
+        We can build the same monthly-refresh system as ActBlue, completely free.
+        <br><small style="opacity:.6;display:block;margin-top:6px">Raw response: ${body.slice(0,200)}</small>
+      </div>`;
+    } else if (code === 401) {
+      resultDiv.innerHTML = `<div class="warn-box">
+        🔑 <strong>Authentication failed (HTTP 401).</strong><br>
+        The API key or app name may be incorrect. Share this with Dale:<br>
+        <small style="opacity:.7;display:block;margin-top:4px">App name used: ${EA_APP_NAME}<br>Key used: ${EA_API_KEY}<br>Error: ${body.slice(0,300)}</small>
+      </div>`;
+    } else if (code === 403) {
+      resultDiv.innerHTML = `<div class="warn-box">
+        🚫 <strong>Permission denied (HTTP 403).</strong><br>
+        Your API key does <em>not</em> have access to bulk contact exports. Dale would need to grant "changedEntityExportJobs" permission to this API key in EveryAction, or create a new key with that access.
+        <br><small style="opacity:.6;display:block;margin-top:6px">Error: ${body.slice(0,300)}</small>
+      </div>`;
+    } else if (code === 0 || res.type === 'opaque') {
+      resultDiv.innerHTML = `<div class="warn-box">
+        🌐 <strong>CORS blocked — but that's actually fine!</strong><br>
+        The browser blocked this test because EveryAction's API doesn't allow direct browser requests.
+        This is normal — the real call will go through your Google Apps Script backend, which doesn't have this limitation.
+        The right next step is to add the bulk export code to the Apps Script and test it there.<br>
+        <small style="opacity:.6;display:block;margin-top:4px">HTTP ${code} · ${res.type}</small>
+      </div>`;
+    } else {
+      resultDiv.innerHTML = `<div class="warn-box">
+        ⚠️ <strong>Unexpected response (HTTP ${code}).</strong><br>
+        Share this with Claude to figure out next steps:<br>
+        <small style="opacity:.6;display:block;margin-top:4px">Status: ${code}<br>Body: ${body.slice(0,400)}</small>
+      </div>`;
+    }
+  } catch(err) {
+    // Network error / CORS — need to route through Apps Script
+    resultDiv.innerHTML = `<div class="warn-box">
+      🌐 <strong>Browser blocked the request (CORS) — but that's actually expected!</strong><br>
+      EveryAction's API doesn't allow direct browser calls — same as ActBlue.
+      This means the test needs to run through your Google Apps Script backend.
+      Add the Apps Script URL to Settings and tap the button below to test via the script.
+      <br><small style="opacity:.6;display:block;margin-top:4px">Error: ${err.message}</small>
+    </div>
+    <button class="btn btn-out" style="margin-top:8px" onclick="testEAViaScript()">🔁 Test via Apps Script instead</button>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔍 Test EveryAction Export Access';
+  }
+}
+
+async function testEAViaScript() {
+  if (!S.scriptUrl) {
+    showToast('Add your Apps Script URL in Settings first');
+    return;
+  }
+  const resultDiv = document.getElementById('ea-test-result');
+  if (resultDiv) resultDiv.innerHTML = '<div class="spin-wrap"><div class="spin"></div>Testing via Apps Script…</div>';
+  try {
+    const url = S.scriptUrl + '?action=testEAExport';
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Script returned HTTP ' + res.status);
+    const data = await res.json();
+    if (resultDiv) {
+      if (data.success) {
+        resultDiv.innerHTML = `<div class="ok-box">✅ <strong>Bulk export is available!</strong> We can build the free monthly-refresh system. Tell Claude: "EA export test passed."<br><small style="opacity:.6">${data.message||''}</small></div>`;
+      } else {
+        resultDiv.innerHTML = `<div class="warn-box">🚫 <strong>Export not available:</strong> ${data.error||'Unknown error'}<br><small style="opacity:.6">Share this error with Claude for next steps.</small></div>`;
+      }
+    }
+  } catch(e) {
+    if (resultDiv) resultDiv.innerHTML = `<div class="warn-box">⚠️ Script test failed: ${e.message}</div>`;
+  }
+}
+
 function saveAndGoHome() {
   S.name         = document.getElementById('s-name')?.value?.trim()||'';
   S.to           = document.getElementById('s-to')?.value?.trim()||'';
