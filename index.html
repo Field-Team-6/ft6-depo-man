@@ -16,7 +16,7 @@
       --white:#ede9e0; --muted:#5e74a0; --border:#1a2644;
       --red:#922020; --green:#1a6e3c; --blue:#1a3a7a; --purple:#2a1a6e;
     }
-    body { background:var(--bg); color:var(--white); font-family:'DM Sans',sans-serif; min-height:100vh; max-width:520px; margin:0 auto; padding-bottom:80px; }
+    body { background:var(--bg); color:var(--white); font-family:'DM Sans',sans-serif; min-height:100vh; max-width:520px; margin:0 auto; padding-bottom:80px; overscroll-behavior-y: none; }
 
     /* ── HEADER ── */
     .hdr { display:flex; align-items:center; justify-content:space-between; padding:16px 20px 12px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg); z-index:200; }
@@ -1179,6 +1179,29 @@ function render() {
   // Auto-fire draft creation when we land on the sending screen
   if (step === 'email-sending') sendDraftToGmail();
 }
+
+// ── PROTECT AGAINST ACCIDENTAL RELOAD / PULL-TO-REFRESH ──
+// Warn if the page is actually navigated away while there's unsaved work
+window.addEventListener('beforeunload', e => {
+  if (checks.length > 0 || draft) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+// Block pull-to-refresh gesture on mobile (catches what CSS alone misses)
+let _touchStartY = 0;
+document.addEventListener('touchstart', e => {
+  _touchStartY = e.touches[0].clientY;
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  const dy = e.touches[0].clientY - _touchStartY;
+  // Only intercept downward pull when already at top of page
+  if (dy > 0 && window.scrollY === 0) {
+    e.preventDefault();
+  }
+}, { passive: false });
+
 render();
 </script>
 </body>
