@@ -280,7 +280,7 @@ let _emailBody    = '';
 
 // AI extraction state
 let _extracting = false;
-let _extracted  = null; // { name, address, city, state, zip }
+let _extracted  = null; // { name, amount, address, city, state, zip }
 
 // FEC search state
 let _fecResults   = [];
@@ -291,6 +291,8 @@ let _fecQuery     = '';
 // ActBlue / EveryAction state
 let _abStatus = null; // null | 'checking' | 'found' | 'notfound' | 'error' | 'no-creds'
 let _eaStatus = null;
+let _abError  = '';
+let _eaError  = '';
 
 // Lightbox
 let _lightboxSrc  = null;
@@ -311,7 +313,7 @@ function startCheck() {
     notes:''
   };
   _extracted = null; _fecResults = []; _fecSelected = null;
-  _abStatus = null; _eaStatus = null; _fecQuery = '';
+  _abStatus = null; _eaStatus = null; _abError = ''; _eaError = ''; _fecQuery = '';
   go('n-front');
 }
 
@@ -399,7 +401,7 @@ async function extractCheckData(imageDataUrl) {
         model:'claude-sonnet-4-20250514', max_tokens:500,
         messages:[{ role:'user', content:[
           { type:'image', source:{ type:'base64', media_type:mediaType, data:base64 }},
-          { type:'text', text:`Extract the following from this check image. Return ONLY valid JSON with these keys: name (payer full name as written), address (street address), city, state, zip. If a field is not visible, use an empty string. Do not include any other text.\n\nExample: {"name":"Jane Smith","address":"123 Main St","city":"Springfield","state":"IL","zip":"62701"}` }
+          { type:'text', text:`Extract the following from this check image. Return ONLY valid JSON with these keys: name (payer full name as written), amount (numeric dollar amount as a string, no $ sign, e.g. "250.00"), address (street address), city, state, zip. If a field is not visible, use an empty string. Do not include any other text.\n\nExample: {"name":"Jane Smith","amount":"250.00","address":"123 Main St","city":"Springfield","state":"IL","zip":"62701"}` }
         ]}]
       })
     });
@@ -426,7 +428,7 @@ async function searchFEC(name) {
     const res  = await fetch(url);
     const data = await res.json();
     const results = data.results || [];
-    // Deduplicate by occupation+employer
+    // Deduplicate by occupation+employer, store FEC URL
     const seen = new Set();
     _fecResults = [];
     for (const r of results) {
@@ -434,7 +436,11 @@ async function searchFEC(name) {
       const emp = (r.contributor_employer  || '').trim();
       const key = `${occ}|${emp}`;
       if (occ || emp) {
-        if (!seen.has(key)) { seen.add(key); _fecResults.push({ name: r.contributor_name, occupation:occ, employer:emp, city:r.contributor_city, state:r.contributor_state }); }
+        if (!seen.has(key)) {
+          seen.add(key);
+          const fecUrl = `https://www.fec.gov/data/receipts/?contributor_name=${encodeURIComponent(r.contributor_name)}&contributor_city=${encodeURIComponent(r.contributor_city||'')}&contributor_state=${encodeURIComponent(r.contributor_state||'')}`;
+          _fecResults.push({ name: r.contributor_name, occupation:occ, employer:emp, city:r.contributor_city, state:r.contributor_state, address:r.contributor_street_1||'', zip:r.contributor_zip||'', fecUrl });
+        }
       }
       if (_fecResults.length >= 4) break;
     }
@@ -455,12 +461,14 @@ async function checkActBlue(donorName) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'checkActBlue', donorName })
     });
-    if (!res.ok) throw new Error('Script error ' + res.status);
+    if (!res.ok) throw new Error('Script returned HTTP ' + res.status);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     _abStatus = data.found ? 'found' : 'notfound';
   } catch(e) {
-    _abStatus = 'cors-error';
+    console.error('ActBlue check failed:', e.message);
+    _abStatus = 'error';
+    _abError = e.message;
   }
   render();
 }
@@ -477,12 +485,14 @@ async function checkEveryAction(donorName) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'checkEveryAction', donorName })
     });
-    if (!res.ok) throw new Error('Script error ' + res.status);
+    if (!res.ok) throw new Error('Script returned HTTP ' + res.status);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     _eaStatus = data.found ? 'found' : 'notfound';
   } catch(e) {
-    _eaStatus = 'cors-error';
+    console.error('EveryAction check failed:', e.message);
+    _eaStatus = 'error';
+    _eaError = e.message;
   }
   render();
 }
@@ -516,20 +526,20 @@ function badgeFor(c) {
 }
 function abStatusHtml() {
   if (!_abStatus) return '';
-  if (_abStatus==='checking')    return `<div class="spin-wrap"><div class="spin"></div>Checking ActBlue…</div>`;
-  if (_abStatus==='found')       return `<div class="ok-box">✅ <strong>Found in ActBlue</strong> — remit on file.</div>`;
-  if (_abStatus==='notfound')    return `<div class="warn-box">⚠️ Not found in ActBlue.</div>`;
-  if (_abStatus==='no-creds')    return `<div class="info-box">ℹ️ Add your Apps Script URL in Settings to auto-check ActBlue.</div>`;
-  if (_abStatus==='cors-error')  return `<div class="warn-box">⚠️ <strong>ActBlue couldn't be reached automatically</strong> (security restriction in browsers). Please check manually, then pick your answer below.</div>`;
+  if (_abStatus==='checking')  return `<div class="spin-wrap"><div class="spin"></div>Checking ActBlue…</div>`;
+  if (_abStatus==='found')     return `<div class="ok-box">✅ <strong>Found in ActBlue</strong> — remit on file.</div>`;
+  if (_abStatus==='notfound')  return `<div class="warn-box">⚠️ Not found in ActBlue.</div>`;
+  if (_abStatus==='no-creds')  return `<div class="warn-box">⚠️ <strong>Script URL not set.</strong> Go to ⚙ Setup and paste in your Google Apps Script URL, then try again.</div>`;
+  if (_abStatus==='error')     return `<div class="warn-box">⚠️ <strong>ActBlue lookup failed.</strong> Check your Script URL in ⚙ Setup, then use the buttons below to confirm manually.<br><small style="opacity:.6">${_abError}</small></div>`;
   return '';
 }
 function eaStatusHtml() {
   if (!_eaStatus) return '';
-  if (_eaStatus==='checking')    return `<div class="spin-wrap"><div class="spin"></div>Checking EveryAction…</div>`;
-  if (_eaStatus==='found')       return `<div class="ok-box">✅ <strong>Found in EveryAction</strong> — remit on file.</div>`;
-  if (_eaStatus==='notfound')    return `<div class="warn-box">⚠️ Not found in EveryAction.</div>`;
-  if (_eaStatus==='no-creds')    return `<div class="info-box">ℹ️ Add your Apps Script URL in Settings to auto-check EveryAction.</div>`;
-  if (_eaStatus==='cors-error')  return `<div class="warn-box">⚠️ <strong>EveryAction couldn't be reached automatically</strong> (security restriction in browsers). Please check manually, then pick your answer below.</div>`;
+  if (_eaStatus==='checking')  return `<div class="spin-wrap"><div class="spin"></div>Checking EveryAction…</div>`;
+  if (_eaStatus==='found')     return `<div class="ok-box">✅ <strong>Found in EveryAction</strong> — remit on file.</div>`;
+  if (_eaStatus==='notfound')  return `<div class="warn-box">⚠️ Not found in EveryAction.</div>`;
+  if (_eaStatus==='no-creds')  return `<div class="warn-box">⚠️ <strong>Script URL not set.</strong> Go to ⚙ Setup and paste in your Google Apps Script URL, then try again.</div>`;
+  if (_eaStatus==='error')     return `<div class="warn-box">⚠️ <strong>EveryAction lookup failed.</strong> Check your Script URL in ⚙ Setup, then use the buttons below to confirm manually.<br><small style="opacity:.6">${_eaError}</small></div>`;
   return '';
 }
 
@@ -631,49 +641,6 @@ function scrFront() {
   </div>`;
 }
 
-// ── STEP 3b: FEC LOOKUP ──
-function scrFEC() {
-  const cn = checks.length+1;
-  const q  = _fecQuery || draft.name;
-  return hdr('Back',"go('n-remit')") + progBar(5,5,`Check #${cn} · Step 5 of 5 — FEC Lookup`) + `<div class="main">
-    <h1 class="stitle">FEC.gov Lookup</h1>
-    <p class="ssub">Search for ${draft.name}'s occupation &amp; employer in FEC donation records.</p>
-    <div class="field" style="display:flex;gap:8px;align-items:flex-end">
-      <div style="flex:1"><label>Search Name</label><input type="text" id="fec-q" value="${q}" placeholder="${draft.name}"></div>
-      <button class="btn btn-out btn-sm" style="margin-top:0;white-space:nowrap" onclick="doFECSearch()">Search</button>
-    </div>
-    ${_fecSearching ? `<div class="spin-wrap"><div class="spin"></div>Searching FEC records…</div>` : ''}
-    ${!_fecSearching && _fecResults.length===0 && _fecQuery ? `<div class="warn-box">No FEC records found for "${_fecQuery}". Try a name variation, or skip and enter occupation manually below.</div>` : ''}
-    ${_fecResults.map((r,i)=>`
-      <div class="fec-result${_fecSelected===i?' selected':''}" onclick="selectFEC(${i})">
-        <div class="fec-name">${r.name}</div>
-        <div class="fec-occ">💼 ${r.occupation||'Unknown occupation'} · ${r.employer||'Unknown employer'}</div>
-        <div class="fec-meta">📍 ${[r.city,r.state].filter(Boolean).join(', ')||'Location unknown'}</div>
-      </div>`).join('')}
-    ${_fecSelected!==null ? `<div class="ok-box">✅ <strong>Selected:</strong> ${_fecResults[_fecSelected].occupation} at ${_fecResults[_fecSelected].employer}</div>` : ''}
-    <div class="div"></div>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Or enter manually:</p>
-    <div class="field"><label>Occupation</label><input type="text" id="fec-occ" value="${draft.fecData?.occupation||(_fecSelected!==null?_fecResults[_fecSelected].occupation:'')}" placeholder="e.g. Attorney" autocapitalize="words"></div>
-    <div class="field"><label>Employer</label><input type="text" id="fec-emp" value="${draft.fecData?.employer||(_fecSelected!==null?_fecResults[_fecSelected].employer:'')}" placeholder="e.g. Smith Law Group" autocapitalize="words"></div>
-    <div class="stack">
-      <button class="btn btn-gold" onclick="saveFEC()">Save &amp; Continue →</button>
-      <button class="btn btn-out" onclick="skipFEC()">Skip for Now</button>
-    </div>
-  </div>`;
-}
-
-function doFECSearch() {
-  const v = document.getElementById('fec-q')?.value?.trim() || draft.name;
-  _fecQuery = v; searchFEC(v);
-}
-function selectFEC(i) { _fecSelected = i; render(); }
-function saveFEC() {
-  const occ = document.getElementById('fec-occ')?.value?.trim()||'';
-  const emp = document.getElementById('fec-emp')?.value?.trim()||'';
-  draft.fecData = { occupation:occ, employer:emp };
-  saveCheckDone();
-}
-function skipFEC() { draft.fecData = null; saveCheckDone(); }
 
 // ── STEP 2: BACK PHOTO + AI READ ──
 function scrBack() {
@@ -698,8 +665,9 @@ function scrBack() {
     ${aiDone ? `
       <div class="ai-card">
         <div class="ai-card-title">✨ AI Read Complete</div>
-        <div class="ai-field"><label>Name</label><div class="val">${ex.name||'—'}</div></div>
-        <div class="ai-field"><label>Address</label><div class="val">${[ex.address,ex.city,ex.state,ex.zip].filter(Boolean).join(', ')||'—'}</div></div>
+        <div class="ai-field"><label>Name</label><div class="${ex.name?'val':'val-empty'}">${ex.name||'Not found'}</div></div>
+        <div class="ai-field"><label>Amount</label><div class="${ex.amount?'val':'val-empty'}">${ex.amount?fmt$(ex.amount):'Not found — enter manually'}</div></div>
+        <div class="ai-field"><label>Address</label><div class="${(ex.address||ex.city)?'val':'val-empty'}">${[ex.address,ex.city,ex.state,ex.zip].filter(Boolean).join(', ')||'Not found'}</div></div>
         <button class="btn btn-out btn-sm" style="margin-top:6px" onclick="_extracted=null;draft.extracted=null;render()">Re-read</button>
       </div>` : ''}
     ${!S.anthropicKey && hasPic ? `<div class="warn-box">Add your Anthropic API key in Settings to enable AI check reading.</div>` : ''}
@@ -731,7 +699,7 @@ function scrConfirm() {
     <p class="ssub">Review and correct the fields below. The AI has pre-filled what it could read from the check.</p>
     ${aiDone ? `<div class="ok-box" style="margin-bottom:14px">✨ <strong>AI filled in the fields below</strong> — review and correct if needed.</div>` : `<div class="info-box" style="margin-bottom:14px">Fill in the donor details below — or go back and tap the AI button on the previous screen.</div>`}
     <div class="field"><label>Donor Full Name *</label><input type="text" id="f-name" value="${draft.name||ex.name||''}" placeholder="Jane Smith" autocapitalize="words"></div>
-    <div class="field"><label>Amount ($) *</label><input type="number" id="f-amt" value="${draft.amount||''}" placeholder="0.00" step="0.01" min="0" inputmode="decimal"></div>
+    <div class="field"><label>Amount ($) *</label><input type="number" id="f-amt" value="${draft.amount||ex.amount||''}" placeholder="0.00" step="0.01" min="0" inputmode="decimal"></div>
     <div class="field"><label>Address</label><input type="text" id="f-addr" value="${ex.address||''}" placeholder="123 Main St" autocapitalize="words"></div>
     <div class="row2">
       <div class="field"><label>City</label><input type="text" id="f-city" value="${ex.city||''}" placeholder="Springfield" autocapitalize="words"></div>
@@ -758,40 +726,68 @@ function saveConfirm() {
   draft.extracted.city    = city;
   draft.extracted.state   = state;
   draft.extracted.zip     = zip;
-  // Kick off FEC search in background for use later
-  if (S.autoFEC!==false && name) { searchFEC(name); }
   go('n-remit');
 }
 
-// ── STEP 4: REMIT ──
+// ── STEP 4a: DO YOU HAVE A PHYSICAL REMIT? ──
 function scrRemit() {
   const cn = checks.length+1;
-  const hasCreds = !!S.scriptUrl;
-  // Auto-check if Apps Script URL present and not checked yet
-  if (hasCreds && !_abStatus && !_eaStatus && draft.name) {
-    checkActBlue(draft.name);
-    checkEveryAction(draft.name);
-  }
   return hdr('Back',"go('n-confirm')") + progBar(4,5,`Check #${cn} · Step 4 of 5 — Remit`) + `<div class="main">
-    <h1 class="stitle">Remit for ${draft.name}</h1>
-    <p class="ssub">Check whether we have ${draft.name}'s FEC remit on file, or photograph the physical one.</p>
-    ${hasCreds?`<div class="sec">Auto-Check Results</div>${abStatusHtml()}${eaStatusHtml()}`:''}
-    ${(_abStatus==='found') ? `
-      <button class="btn btn-blue" onclick="pickRemit('manual-ab')">✅ Confirm — ActBlue on file</button><div style="height:10px"></div>` : ''}
-    ${(_eaStatus==='found') ? `
-      <button class="btn" style="background:var(--purple);color:#fff" onclick="pickRemit('manual-ea')">✅ Confirm — EveryAction on file</button><div style="height:10px"></div>` : ''}
-    <div class="div"></div>
-    <div class="sec">Choose Remit Option</div>
-    <div class="ropt" onclick="go('n-remit-pdf')"><div class="ri">📝</div><div><div class="rl">Generate PDF Remit</div><div class="rd">Fill &amp; download the FT6 remit form</div></div></div>
-    <div class="ropt" onclick="go('n-remit-photo')"><div class="ri">📄</div><div><div class="rl">I have a physical remit</div><div class="rd">I'll photograph it now</div></div></div>
-    <div class="ropt" onclick="pickRemit('actblue')"><div class="ri">🔵</div><div><div class="rl">ActBlue — on file</div><div class="rd">Remit in our ActBlue records</div></div></div>
-    <div class="ropt" onclick="pickRemit('everyaction')"><div class="ri">🟣</div><div><div class="rl">EveryAction — on file</div><div class="rd">Remit in our EveryAction records</div></div></div>
+    <h1 class="stitle">Do you have a physical remit?</h1>
+    <p class="ssub">Is there a filled-out FEC remit form in hand for ${draft.name}?</p>
+    <div class="stack" style="margin-top:8px">
+      <div class="ropt" onclick="go('n-remit-photo')"><div class="ri">📄</div><div><div class="rl">Yes — I have one</div><div class="rd">I'll photograph it now</div></div></div>
+      <div class="ropt" onclick="startRemitLookup()"><div class="ri">🔍</div><div><div class="rl">No — check ActBlue &amp; EveryAction</div><div class="rd">Look up whether a remit is already on file</div></div></div>
+    </div>
   </div>`;
 }
 
-function pickRemit(type) { draft.remitType = type; draft.remit = null; go('n-fec'); }
+function startRemitLookup() {
+  _abStatus = null; _eaStatus = null;
+  go('n-remit-lookup');
+  // Kick off both checks immediately
+  checkActBlue(draft.name);
+  checkEveryAction(draft.name);
+}
 
-// ── STEP 5b: REMIT PHOTO ──
+// ── STEP 4b: ACTBLUE / EVERYACTION LOOKUP ──
+function scrRemitLookup() {
+  const cn = checks.length+1;
+  const bothDone = _abStatus && _abStatus !== 'checking' && _eaStatus && _eaStatus !== 'checking';
+  const foundAB = _abStatus === 'found';
+  const foundEA = _eaStatus === 'found';
+  const errorAB = _abStatus === 'error' || _abStatus === 'no-creds';
+  const errorEA = _eaStatus === 'error' || _eaStatus === 'no-creds';
+  const neitherFound = bothDone && !foundAB && !foundEA;
+  const anyError = errorAB || errorEA;
+  const title = bothDone ? (foundAB || foundEA ? 'Found a remit on file' : 'Not found automatically') : 'Checking records…';
+  return hdr('Back',"go('n-remit')") + progBar(4,5,`Check #${cn} · Step 4 of 5 — Remit Lookup`) + `<div class="main">
+    <h1 class="stitle">${title}</h1>
+    <p class="ssub">Looking up ${draft.name} in ActBlue and EveryAction.</p>
+    <div class="sec">ActBlue</div>
+    ${abStatusHtml()}
+    <div class="sec" style="margin-top:14px">EveryAction</div>
+    ${eaStatusHtml()}
+    ${foundAB ? `<div style="margin-top:18px"><button class="btn btn-blue" onclick="pickRemit('actblue')">✅ Confirm — ActBlue on file →</button></div>` : ''}
+    ${foundEA ? `<div style="margin-top:10px"><button class="btn" style="background:var(--purple);color:#fff;display:flex;align-items:center;justify-content:center;width:100%;padding:15px;border:none;border-radius:11px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer" onclick="pickRemit('everyaction')">✅ Confirm — EveryAction on file →</button></div>` : ''}
+    ${neitherFound && !anyError ? `
+      <div class="warn-box" style="margin-top:18px">⚠️ Not found in either system.</div>
+      <div style="margin-top:14px"><button class="btn btn-gold" onclick="startFECForRemit()">Not on file — Search FEC.gov →</button></div>` : ''}
+    ${anyError && bothDone ? `
+      <div class="div" style="margin-top:8px"></div>
+      <div class="sec">Couldn't check automatically — what's the situation?</div>
+      <div class="stack">
+        <button class="btn btn-blue" onclick="pickRemit('actblue')">🔵 It's on file in ActBlue</button>
+        <button class="btn" style="background:var(--purple);color:#fff;display:flex;align-items:center;justify-content:center;width:100%;padding:15px;border:none;border-radius:11px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer" onclick="pickRemit('everyaction')">🟣 It's on file in EveryAction</button>
+        <button class="btn btn-gold" onclick="startFECForRemit()">❌ Not on file — Search FEC.gov →</button>
+      </div>` : ''}
+    ${!bothDone ? `<div class="info-box" style="margin-top:18px">Checking both systems — this takes just a moment…</div>` : ''}
+  </div>`;
+}
+
+function pickRemit(type) { draft.remitType = type; draft.remit = null; saveCheckDone(); }
+
+// ── STEP 4c: REMIT PHOTO ──
 function scrRemitPhoto() {
   const cn = checks.length+1;
   const hasPic = !!draft.remit;
@@ -808,19 +804,87 @@ function scrRemitPhoto() {
     ${hasPic ? `<button class="btn btn-gold" onclick="finishRemitPhoto()">Save This Check →</button>` : ''}
   </div>`;
 }
-function finishRemitPhoto() { draft.remitType='photo'; go('n-fec'); }
+function finishRemitPhoto() { draft.remitType='photo'; saveCheckDone(); }
 
+// ── STEP 4d: FEC LOOKUP → GENERATE PDF ──
+function startFECForRemit() {
+  _fecResults = []; _fecSelected = null; _fecQuery = draft.name;
+  searchFEC(draft.name);
+  go('n-fec');
+}
 
-// ── STEP 5c: GENERATE PDF REMIT ──
+function scrFEC() {
+  const cn = checks.length+1;
+  const q  = _fecQuery || draft.name;
+  const bothSearchDone = !_fecSearching;
+  return hdr('Back',"go('n-remit-lookup')") + progBar(5,5,`Check #${cn} · Step 5 of 5 — FEC Lookup &amp; Remit`) + `<div class="main">
+    <h1 class="stitle">FEC.gov Lookup</h1>
+    <p class="ssub">Find ${draft.name} in FEC records to confirm their employer &amp; occupation, then generate the remit.</p>
+    <div class="field" style="display:flex;gap:8px;align-items:flex-end">
+      <div style="flex:1"><label>Search Name</label><input type="text" id="fec-q" value="${q}" placeholder="${draft.name}"></div>
+      <button class="btn btn-out btn-sm" style="margin-top:0;white-space:nowrap" onclick="doFECSearch()">Search</button>
+    </div>
+    ${_fecSearching ? `<div class="spin-wrap"><div class="spin"></div>Searching FEC records…</div>` : ''}
+    ${!_fecSearching && _fecResults.length===0 && _fecQuery ? `<div class="warn-box">No FEC records found for "${_fecQuery}". Try a name variation, or fill in employer &amp; occupation manually below.</div>` : ''}
+    ${_fecResults.map((r,i)=>`
+      <div class="fec-result${_fecSelected===i?' selected':''}" onclick="selectFEC(${i})">
+        <div class="fec-name">${r.name}</div>
+        <div class="fec-occ">💼 ${r.occupation||'Unknown occupation'} · ${r.employer||'Unknown employer'}</div>
+        <div class="fec-meta">📍 ${[r.city,r.state].filter(Boolean).join(', ')||'Location unknown'}</div>
+        <a href="${r.fecUrl}" target="_blank" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:5px;margin-top:7px;font-size:12px;color:var(--gold);text-decoration:none;font-weight:600">🔗 Verify on FEC.gov ↗</a>
+      </div>`).join('')}
+    ${_fecSelected!==null ? `<div class="ok-box">✅ <strong>Selected:</strong> ${_fecResults[_fecSelected].occupation} at ${_fecResults[_fecSelected].employer}</div>` : ''}
+    <div class="div"></div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Or enter manually:</p>
+    <div class="field"><label>Occupation</label><input type="text" id="fec-occ" value="${draft.fecData?.occupation||(_fecSelected!==null?_fecResults[_fecSelected].occupation:'')}" placeholder="e.g. Attorney" autocapitalize="words"></div>
+    <div class="field"><label>Employer</label><input type="text" id="fec-emp" value="${draft.fecData?.employer||(_fecSelected!==null?_fecResults[_fecSelected].employer:'')}" placeholder="e.g. Smith Law Group" autocapitalize="words"></div>
+    <div class="stack">
+      <button class="btn btn-gold" onclick="saveFECAndGeneratePDF()">Continue to Generate Remit PDF →</button>
+      <button class="btn btn-out" onclick="saveFECSkipPDF()">Skip PDF — Save Check As-Is</button>
+    </div>
+  </div>`;
+}
+
+function doFECSearch() {
+  const v = document.getElementById('fec-q')?.value?.trim() || draft.name;
+  _fecQuery = v; searchFEC(v);
+}
+function selectFEC(i) {
+  _fecSelected = i;
+  // Auto-fill address from FEC result if we have it and draft is missing it
+  const r = _fecResults[i];
+  if (r) {
+    if (!draft.extracted) draft.extracted = {};
+    if (!draft.extracted.address && r.address) draft.extracted.address = r.address;
+    if (!draft.extracted.city    && r.city)    draft.extracted.city    = r.city;
+    if (!draft.extracted.state   && r.state)   draft.extracted.state   = r.state;
+    if (!draft.extracted.zip     && r.zip)     draft.extracted.zip     = r.zip;
+  }
+  render();
+}
+function saveFECAndGeneratePDF() {
+  const occ = document.getElementById('fec-occ')?.value?.trim()||'';
+  const emp = document.getElementById('fec-emp')?.value?.trim()||'';
+  draft.fecData = { occupation:occ, employer:emp };
+  go('n-remit-pdf');
+}
+function saveFECSkipPDF() {
+  const occ = document.getElementById('fec-occ')?.value?.trim()||'';
+  const emp = document.getElementById('fec-emp')?.value?.trim()||'';
+  draft.fecData = { occupation:occ, employer:emp };
+  saveCheckDone();
+}
+
+// ── STEP 5: GENERATE PDF REMIT ──
 function scrRemitPDF() {
   const cn = checks.length+1;
   const ex = draft.extracted || {};
   const fd = draft.fecData   || {};
   const cityState = [ex.city, ex.state].filter(Boolean).join(', ');
-  return hdr('Back',"go('n-remit')") + progBar(4,5,`Check #${cn} · Step 4 of 5 — Generate PDF Remit`) + `<div class="main">
-    <h1 class="stitle">PDF Remit for ${draft.name}</h1>
-    <p class="ssub">Review and fill in the fields below. The app will generate a filled PDF remit form for you to download.</p>
-    <div class="ok-box">✅ <strong>Mandatory fields</strong> are marked with *. Optional fields can be left blank.</div>
+  return hdr('Back',"go('n-fec')") + progBar(5,5,`Check #${cn} · Step 5 of 5 — Generate PDF Remit`) + `<div class="main">
+    <h1 class="stitle">Generate Remit PDF</h1>
+    <p class="ssub">Review all fields — these will be filled into the official FT6 remit form.</p>
+    <div class="ok-box">✅ <strong>Required fields</strong> are marked with *.</div>
     <div class="field"><label>Name *</label><input type="text" id="rf-name" value="${draft.name||''}" placeholder="Full Name" autocapitalize="words"></div>
     <div class="field"><label>Address *</label><input type="text" id="rf-addr" value="${ex.address||''}" placeholder="123 Main Street" autocapitalize="words"></div>
     <div class="field"><label>City, State *</label><input type="text" id="rf-citystate" value="${cityState||''}" placeholder="Springfield, IL" autocapitalize="words"></div>
@@ -832,7 +896,7 @@ function scrRemitPDF() {
     <div class="field"><label>Phone (optional)</label><input type="text" id="rf-phone" value="" placeholder="555-555-5555" inputmode="tel"></div>
     <div class="stack">
       <button class="btn btn-gold" onclick="doGeneratePDF()">📥 Generate &amp; Download PDF</button>
-      <button class="btn btn-out" onclick="go('n-remit')">← Back</button>
+      <button class="btn btn-out" onclick="go('n-fec')">← Back</button>
     </div>
   </div>`;
 }
@@ -848,7 +912,6 @@ async function doGeneratePDF() {
   const email  = document.getElementById('rf-email')?.value?.trim();
   const phone  = document.getElementById('rf-phone')?.value?.trim();
   if (!name||!addr||!cs||!zip||!emp||!occ||!amt) { showToast('Please fill in all required fields (*)'); return; }
-  // Store back to draft for email summary
   if (!draft.extracted) draft.extracted = {};
   const csParts = cs.split(',').map(s=>s.trim());
   draft.extracted.address = addr;
@@ -862,10 +925,9 @@ async function doGeneratePDF() {
   if (fname) {
     draft.remitType = 'pdf-generated';
     draft.remitFile = fname;
-    go('n-fec');
+    saveCheckDone();
   }
 }
-
 function saveCheckDone() { checks.push({...draft}); draft=null; go('saved'); }
 
 // ── SAVED ──
@@ -1021,9 +1083,10 @@ const SCREENS = {
   home:'scrHome', settings:'scrSettings',
   'n-front':'scrFront', 'n-back':'scrBack',
   'n-confirm':'scrConfirm',
-  'n-fec':'scrFEC',
   'n-remit':'scrRemit',
+  'n-remit-lookup':'scrRemitLookup',
   'n-remit-photo':'scrRemitPhoto',
+  'n-fec':'scrFEC',
   'n-remit-pdf':'scrRemitPDF',
   saved:'scrSaved', review:'scrReview', email:'scrEmail'
 };
