@@ -224,7 +224,7 @@ async function generateAndDownloadRemit(fields) {
     set('Text6', fields.zip);
     set('Text7', fields.employer);
     set('Text8', fields.occupation);
-    set('Text9', String(fields.donationAmount).replace(/[$,]/g,''));
+    set('Text9', fmt$(fields.donationAmount));
     form.flatten();
     const filledBytes = await pdfDoc.save();
 
