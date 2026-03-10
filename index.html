@@ -456,11 +456,8 @@ async function checkActBlue(donorName) {
   if (!S.scriptUrl) { _abStatus='no-creds'; render(); return; }
   _abStatus = 'checking'; render();
   try {
-    const res = await fetch(S.scriptUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'checkActBlue', donorName })
-    });
+    const url = S.scriptUrl + '?action=checkActBlue&donorName=' + encodeURIComponent(donorName);
+    const res = await fetch(url);
     if (!res.ok) throw new Error('Script returned HTTP ' + res.status);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
@@ -480,11 +477,8 @@ async function checkEveryAction(donorName) {
   if (!S.scriptUrl) { _eaStatus='no-creds'; render(); return; }
   _eaStatus = 'checking'; render();
   try {
-    const res = await fetch(S.scriptUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'checkEveryAction', donorName })
-    });
+    const url = S.scriptUrl + '?action=checkEveryAction&donorName=' + encodeURIComponent(donorName);
+    const res = await fetch(url);
     if (!res.ok) throw new Error('Script returned HTTP ' + res.status);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
